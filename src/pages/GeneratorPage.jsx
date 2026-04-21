@@ -1,9 +1,34 @@
 import { FireOutlined, SyncOutlined } from '@ant-design/icons'
 import { Button, Card, Col, Empty, Row, Select, Space, Tag, Typography } from 'antd'
+import { useMemo } from 'react'
 import { useLunch } from '../context/LunchContext'
+
+function getCaloriesLevelMeta(calories) {
+  if (calories <= 220) {
+    return { color: 'green', label: '低热量' }
+  }
+
+  if (calories <= 450) {
+    return { color: 'gold', label: '中热量' }
+  }
+
+  return { color: 'red', label: '高热量' }
+}
 
 export default function GeneratorPage() {
   const { dailyMenu, generateMenu, menuCount, setMenuCount, todayKey } = useLunch()
+  const groupedMenu = useMemo(() => {
+    return dailyMenu.items.reduce((groups, dish) => {
+      const category = dish.category || '未分类'
+
+      if (!groups[category]) {
+        groups[category] = []
+      }
+
+      groups[category].push(dish)
+      return groups
+    }, {})
+  }, [dailyMenu.items])
 
   return (
     <Space direction="vertical" size={24} className="page-stack">
@@ -39,20 +64,49 @@ export default function GeneratorPage() {
         extra={<Tag color="gold">{dailyMenu.date}</Tag>}
       >
         {dailyMenu.items.length ? (
-          <Row gutter={[16, 16]}>
-            {dailyMenu.items.map((dish, index) => (
-              <Col xs={24} md={12} xl={8} key={dish.id}>
-                <Card className="menu-result-card" bordered={false}>
-                  <Tag color="geekblue">No. {index + 1}</Tag>
-                  <Typography.Title level={4}>{dish.name}</Typography.Title>
-                  <Typography.Paragraph type="secondary">{dish.category}</Typography.Paragraph>
+          <Space direction="vertical" size={20} style={{ width: '100%' }}>
+            {Object.entries(groupedMenu).map(([category, dishes]) => (
+              <section key={category} className="menu-category-section">
+                <div className="menu-category-header">
                   <Space wrap>
-                    {dish.tags.length ? dish.tags.map((tag) => <Tag key={`${dish.id}-${tag}`}>{tag}</Tag>) : <Tag>待补充标签</Tag>}
+                    <Typography.Title level={4} style={{ margin: 0 }}>
+                      {category}
+                    </Typography.Title>
+                    <Tag color="blue">{dishes.length} 道</Tag>
                   </Space>
-                </Card>
-              </Col>
+                </div>
+
+                <Row gutter={[16, 16]}>
+                  {dishes.map((dish) => {
+                    const caloriesMeta = getCaloriesLevelMeta(dish.calories)
+
+                    return (
+                      <Col xs={24} md={12} xl={8} key={dish.id}>
+                        <Card className="menu-result-card" bordered={false}>
+                          <Space wrap>
+                            <Tag color="geekblue">{dish.servingTemperature || '待定温度'}</Tag>
+                            <Tag color={caloriesMeta.color}>
+                              {dish.calories} kcal · {caloriesMeta.label}
+                            </Tag>
+                            {caloriesMeta.label === '高热量' ? <Tag color="volcano">高热量提醒</Tag> : null}
+                          </Space>
+                          <Typography.Title level={4}>{dish.name}</Typography.Title>
+                          <Typography.Paragraph type="secondary">{dish.category}</Typography.Paragraph>
+                          <Space wrap>
+                            {dish.tags.length ? (
+                              dish.tags.map((tag) => <Tag key={`${dish.id}-${tag}`}>{tag}</Tag>)
+                            ) : (
+                              <Tag>待补充标签</Tag>
+                            )}
+                          </Space>
+                        </Card>
+                      </Col>
+                    )
+                  })}
+                </Row>
+              </section>
             ))}
-          </Row>
+          </Space>
         ) : (
           <Empty description="还没有可生成的菜品，先去菜品库添加内容吧" />
         )}
