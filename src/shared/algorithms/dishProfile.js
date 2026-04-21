@@ -1,6 +1,7 @@
 export const CATEGORY_OPTIONS = ['荤菜', '素菜', '汤', '主食']
 export const TEMPERATURE_OPTIONS = ['冷菜', '热菜']
 
+// 兼容历史版本的枚举值，读取旧数据时映射到当前标准。
 const LEGACY_CATEGORY_MAP = {
   家常菜: '荤菜',
   轻食: '素菜',
@@ -30,6 +31,7 @@ function includesAny(name, words) {
   return words.some((word) => name.includes(word))
 }
 
+// 分类推断按“汤/主食/荤/素”优先级依次命中。
 function inferCategory(name) {
   if (includesAny(name, keywordGroups.soup)) {
     return '汤'
@@ -50,6 +52,7 @@ function inferCategory(name) {
   return '荤菜'
 }
 
+// 冷热只做轻量推断，默认归为热菜。
 function inferServingTemperature(name) {
   if (includesAny(name, keywordGroups.cold)) {
     return '冷菜'
@@ -58,6 +61,7 @@ function inferServingTemperature(name) {
   return '热菜'
 }
 
+// 以分类基线热量为主，再结合烹饪方式/关键词做增减修正。
 function inferCalories(name, category, servingTemperature) {
   let calories = 320
 
@@ -94,6 +98,7 @@ function inferCalories(name, category, servingTemperature) {
   return Math.max(50, Math.min(900, calories))
 }
 
+// 标签用于展示和筛选，尽量覆盖口味、做法、营养特征。
 function inferTags(name, category, servingTemperature, calories) {
   const tags = new Set()
 
@@ -144,6 +149,7 @@ function inferTags(name, category, servingTemperature, calories) {
   return [...tags]
 }
 
+// 根据菜名推断标准化画像（分类、冷热、热量、标签）。
 export function inferDishProfile(name) {
   const cleanName = name.trim()
   const category = inferCategory(cleanName)
@@ -160,6 +166,7 @@ export function inferDishProfile(name) {
   }
 }
 
+// 合并历史数据与推断结果：优先保留用户已填信息，不足再回退推断值。
 export function normalizeHistoricalDish(dish) {
   const inferred = inferDishProfile(dish.name || '')
   const legacyCategory = LEGACY_CATEGORY_MAP[dish.category] ?? dish.category

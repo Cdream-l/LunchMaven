@@ -2,6 +2,7 @@ import { pickRandomItems } from './menu'
 
 const DEFAULT_TARGET_CALORIES_PER_DISH = 320
 
+// 兜底热量：当菜品热量缺失或异常时，用统一值参与热量排序。
 function toSafeCalories(value) {
   const calories = Number(value)
   return Number.isFinite(calories) && calories > 0 ? calories : DEFAULT_TARGET_CALORIES_PER_DISH
@@ -38,6 +39,7 @@ export function generateBalancedMenu(dishes, count, options = {}) {
     return []
   }
 
+  // 规范入参：至少选 1 道，且不超过可用菜品总数。
   const safeCount = Math.max(1, Math.min(Number(count) || 1, dishes.length))
   const targetAverageCalories = Math.max(120, Number(options.targetAverageCalories) || DEFAULT_TARGET_CALORIES_PER_DISH)
   const selected = []
@@ -57,6 +59,7 @@ export function generateBalancedMenu(dishes, count, options = {}) {
     mustHavePools.push(coldPool, hotPool)
   }
 
+  // 第一阶段：优先满足“结构平衡”（荤素/冷热）。
   mustHavePools.forEach((pool) => {
     if (selected.length >= safeCount) {
       return
@@ -75,6 +78,7 @@ export function generateBalancedMenu(dishes, count, options = {}) {
     return selected.slice(0, safeCount)
   }
 
+  // 第二阶段：按目标热量接近程度补齐，控制整体热量波动。
   const remaining = dishes.filter((dish) => !selectedIds.has(dish.id))
   const byCalories = sortByCaloriesGap(remaining, targetAverageCalories)
 
@@ -86,6 +90,7 @@ export function generateBalancedMenu(dishes, count, options = {}) {
   })
 
   if (selected.length < safeCount) {
+    // 第三阶段兜底：在极端数据下仍保证返回固定数量菜品。
     const fallback = pickRandomItems(
       dishes.filter((dish) => !selectedIds.has(dish.id)),
       safeCount - selected.length,
