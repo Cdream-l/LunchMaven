@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { defaultDishes } from '../data/defaultDishes'
 import { normalizeHistoricalDish } from '../shared/algorithms/dishProfile'
-import { normalizeTags, pickRandomItems, todayKey } from '../shared/algorithms/menu'
+import { normalizeTags, todayKey } from '../shared/algorithms/menu'
+import { generateBalancedMenu } from '../shared/algorithms/menuPlanner'
 import { loadLunchState, saveDailyMenu, saveDishes, saveMenuCount } from '../shared/storage/lunchDb'
 
 const LunchContext = createContext(null)
@@ -11,7 +12,7 @@ export function LunchProvider({ children }) {
   const [menuCount, setMenuCount] = useState(3)
   const [dailyMenu, setDailyMenu] = useState({
     date: todayKey(),
-    items: pickRandomItems(defaultDishes, 3),
+    items: generateBalancedMenu(defaultDishes, 3),
   })
   const [isReady, setIsReady] = useState(false)
 
@@ -23,7 +24,7 @@ export function LunchProvider({ children }) {
         dishes: defaultDishes,
         dailyMenu: {
           date: todayKey(),
-          items: pickRandomItems(defaultDishes, 3),
+          items: generateBalancedMenu(defaultDishes, 3),
         },
         menuCount: 3,
       }
@@ -40,7 +41,7 @@ export function LunchProvider({ children }) {
         if (nextDailyMenu.date !== todayKey()) {
           nextDailyMenu = {
             date: todayKey(),
-            items: pickRandomItems(nextDishes, nextMenuCount),
+            items: generateBalancedMenu(nextDishes, nextMenuCount),
           }
         }
 
@@ -80,7 +81,7 @@ export function LunchProvider({ children }) {
     if (dailyMenu.date !== todayKey()) {
       setDailyMenu({
         date: todayKey(),
-        items: pickRandomItems(dishes, menuCount),
+        items: generateBalancedMenu(dishes, menuCount),
       })
       return
     }
@@ -88,7 +89,7 @@ export function LunchProvider({ children }) {
     if (!dailyMenu.items.length && dishes.length) {
       setDailyMenu({
         date: todayKey(),
-        items: pickRandomItems(dishes, menuCount),
+        items: generateBalancedMenu(dishes, menuCount),
       })
     }
   }, [dailyMenu.date, dailyMenu.items.length, dishes, isReady, menuCount])
@@ -157,7 +158,7 @@ export function LunchProvider({ children }) {
 
     setDailyMenu({
       date: todayKey(),
-      items: pickRandomItems(dishes, menuCount),
+      items: generateBalancedMenu(dishes, menuCount),
     })
   }
 
@@ -165,7 +166,7 @@ export function LunchProvider({ children }) {
     setDishes(defaultDishes)
     setDailyMenu({
       date: todayKey(),
-      items: pickRandomItems(defaultDishes, menuCount),
+      items: generateBalancedMenu(defaultDishes, menuCount),
     })
   }
 
@@ -175,7 +176,7 @@ export function LunchProvider({ children }) {
     setDishes(normalizedDishes)
     setDailyMenu({
       date: todayKey(),
-      items: pickRandomItems(normalizedDishes, menuCount),
+      items: generateBalancedMenu(normalizedDishes, menuCount),
     })
   }
 
