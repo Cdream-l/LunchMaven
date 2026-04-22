@@ -49,7 +49,7 @@ export default function GeneratorPage() {
           <Col xs={24} lg={14}>
             <Typography.Title level={2}>今日菜单</Typography.Title>
             <Typography.Paragraph>
-              页面聚焦在"生成"和"查看结果"，不再和录入、筛选等操作混在一起。
+              选择菜品数量后，系统会生成对应数量的荤菜+素菜，再自动添加1道主食和1道汤品，确保营养均衡。
             </Typography.Paragraph>
           </Col>
           <Col xs={24} lg={10}>
@@ -87,7 +87,10 @@ export default function GeneratorPage() {
                         <Typography.Title level={4} style={{ margin: 0 }}>
                           {category}
                         </Typography.Title>
-                        <Tag color="blue">{dishes.length} 道</Tag>
+                        <div className="category-count">
+                          <span className="count-number">{dishes.length}</span>
+                          <span className="count-label">道</span>
+                        </div>
                       </div>
                       <div className="menu-dishes-list">
                         {dishes.map((dish) => {
@@ -96,14 +99,18 @@ export default function GeneratorPage() {
                           return (
                             <div key={dish.id} className="menu-dish-item">
                               <div className="dish-info-header">
-                                <Typography.Text strong className="dish-name-text">{dish.name}</Typography.Text>
+                                <div className="dish-name-section">
+                                  <Tag color={dish.servingTemperature === '热菜' ? 'red' : dish.servingTemperature === '冷菜' ? 'cyan' : 'default'}>
+                                    {dish.servingTemperature === '热菜' ? '热' : dish.servingTemperature === '冷菜' ? '冷' : '待定'}
+                                  </Tag>
+                                  <Typography.Text strong className="dish-name-text">{dish.name}</Typography.Text>
+                                </div>
                                 <Tag color={caloriesMeta.color} size="small">
                                   {dish.calories} kcal
                                 </Tag>
                               </div>
-                              <div className="dish-details">
+                              <div className="dish-tags">
                                 <Space size={4} wrap>
-                                  <Tag color="geekblue" size="small">{dish.servingTemperature || '待定温度'}</Tag>
                                   {dish.tags && dish.tags.length ? (
                                     dish.tags.map((tag) => (
                                       <Tag key={`${dish.id}-${tag}`} size="small">{tag}</Tag>

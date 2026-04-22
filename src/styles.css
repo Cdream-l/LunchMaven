@@ -216,6 +216,30 @@ body {
   margin-bottom: 12px;
 }
 
+.category-count {
+  background: linear-gradient(135deg, #d46b08, #fa8c16);
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-weight: 600;
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  box-shadow: 0 2px 8px rgba(212, 107, 8, 0.2);
+}
+
+.count-number {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.count-label {
+  font-size: 12px;
+  opacity: 0.95;
+  color: #fff;
+}
+
 .menu-dishes-list {
   display: flex;
   flex-direction: column;
@@ -242,7 +266,36 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dish-name-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.dish-name-section .ant-tag {
+  margin-right: -2px;
+}
+
+.temperature-tag {
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  background: linear-gradient(135deg, #1890ff, #36cfc9);
+  color: white;
+  border: none;
+}
+
+.dish-tags {
+  padding-left: 4px;
+  margin-top: 4px;
 }
 
 .dish-name-text {
