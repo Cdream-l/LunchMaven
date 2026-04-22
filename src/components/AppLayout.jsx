@@ -69,7 +69,7 @@ export default function AppLayout() {
           placement="left"
           open={drawerOpen}
           onClose={() => setDrawerOpen(false)}
-          bodyStyle={{ padding: 0 }}
+          styles={{ body: { padding: 0 } }}
         >
           {menu}
         </Drawer>

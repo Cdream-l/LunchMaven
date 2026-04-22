@@ -30,6 +30,18 @@ export default function GeneratorPage() {
     }, {})
   }, [dailyMenu.items])
 
+  const sortedCategories = useMemo(() => {
+    const categoryOrder = ['主食', '荤菜', '素菜', '汤', '未分类']
+    return Object.keys(groupedMenu).sort((a, b) => {
+      const indexA = categoryOrder.indexOf(a)
+      const indexB = categoryOrder.indexOf(b)
+      if (indexA === -1 && indexB === -1) return a.localeCompare(b)
+      if (indexA === -1) return 1
+      if (indexB === -1) return -1
+      return indexA - indexB
+    })
+  }, [groupedMenu])
+
   return (
     <Space direction="vertical" size={24} className="page-stack">
       <Card>
@@ -37,7 +49,7 @@ export default function GeneratorPage() {
           <Col xs={24} lg={14}>
             <Typography.Title level={2}>今日菜单</Typography.Title>
             <Typography.Paragraph>
-              页面聚焦在“生成”和“查看结果”，不再和录入、筛选等操作混在一起。
+              页面聚焦在"生成"和"查看结果"，不再和录入、筛选等操作混在一起。
             </Typography.Paragraph>
           </Col>
           <Col xs={24} lg={10}>
@@ -64,49 +76,53 @@ export default function GeneratorPage() {
         extra={<Tag color="gold">{dailyMenu.date}</Tag>}
       >
         {dailyMenu.items.length ? (
-          <Space direction="vertical" size={20} style={{ width: '100%' }}>
-            {Object.entries(groupedMenu).map(([category, dishes]) => (
-              <section key={category} className="menu-category-section">
-                <div className="menu-category-header">
-                  <Space wrap>
-                    <Typography.Title level={4} style={{ margin: 0 }}>
-                      {category}
-                    </Typography.Title>
-                    <Tag color="blue">{dishes.length} 道</Tag>
-                  </Space>
-                </div>
+          <div className="menu-layout-container">
+            <Row gutter={[16, 0]} className="menu-categories-row">
+              {sortedCategories.map((category) => {
+                const dishes = groupedMenu[category]
+                return (
+                  <Col key={category} xs={24} sm={12} md={8} lg={6} className="menu-category-col">
+                    <div className="menu-category-card">
+                      <div className="menu-category-title">
+                        <Typography.Title level={4} style={{ margin: 0 }}>
+                          {category}
+                        </Typography.Title>
+                        <Tag color="blue">{dishes.length} 道</Tag>
+                      </div>
+                      <div className="menu-dishes-list">
+                        {dishes.map((dish) => {
+                          const caloriesMeta = getCaloriesLevelMeta(dish.calories)
 
-                <Row gutter={[16, 16]}>
-                  {dishes.map((dish) => {
-                    const caloriesMeta = getCaloriesLevelMeta(dish.calories)
-
-                    return (
-                      <Col xs={24} md={12} xl={8} key={dish.id}>
-                        <Card className="menu-result-card" bordered={false}>
-                          <Space wrap>
-                            <Tag color="geekblue">{dish.servingTemperature || '待定温度'}</Tag>
-                            <Tag color={caloriesMeta.color}>
-                              {dish.calories} kcal · {caloriesMeta.label}
-                            </Tag>
-                            {caloriesMeta.label === '高热量' ? <Tag color="volcano">高热量提醒</Tag> : null}
-                          </Space>
-                          <Typography.Title level={4}>{dish.name}</Typography.Title>
-                          <Typography.Paragraph type="secondary">{dish.category}</Typography.Paragraph>
-                          <Space wrap>
-                            {dish.tags.length ? (
-                              dish.tags.map((tag) => <Tag key={`${dish.id}-${tag}`}>{tag}</Tag>)
-                            ) : (
-                              <Tag>待补充标签</Tag>
-                            )}
-                          </Space>
-                        </Card>
-                      </Col>
-                    )
-                  })}
-                </Row>
-              </section>
-            ))}
-          </Space>
+                          return (
+                            <div key={dish.id} className="menu-dish-item">
+                              <div className="dish-info-header">
+                                <Typography.Text strong className="dish-name-text">{dish.name}</Typography.Text>
+                                <Tag color={caloriesMeta.color} size="small">
+                                  {dish.calories} kcal
+                                </Tag>
+                              </div>
+                              <div className="dish-details">
+                                <Space size={4} wrap>
+                                  <Tag color="geekblue" size="small">{dish.servingTemperature || '待定温度'}</Tag>
+                                  {dish.tags && dish.tags.length ? (
+                                    dish.tags.map((tag) => (
+                                      <Tag key={`${dish.id}-${tag}`} size="small">{tag}</Tag>
+                                    ))
+                                  ) : (
+                                    <Tag size="small">待补充标签</Tag>
+                                  )}
+                                </Space>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </Col>
+                )
+              })}
+            </Row>
+          </div>
         ) : (
           <Empty description="还没有可生成的菜品，先去菜品库添加内容吧" />
         )}
