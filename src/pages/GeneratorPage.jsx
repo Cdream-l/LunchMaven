@@ -1,6 +1,6 @@
-import { FireOutlined, SyncOutlined } from '@ant-design/icons'
-import { Button, Card, Col, Empty, Row, Select, Space, Tag, Typography } from 'antd'
-import { useMemo } from 'react'
+import { FireOutlined, HistoryOutlined } from '@ant-design/icons'
+import { Button, Card, Col, Empty, Modal, Row, Select, Space, Tag, Typography } from 'antd'
+import { useMemo, useState } from 'react'
 import { useLunch } from '../context/LunchContext'
 
 function getCaloriesLevelMeta(calories) {
@@ -16,7 +16,8 @@ function getCaloriesLevelMeta(calories) {
 }
 
 export default function GeneratorPage() {
-  const { dailyMenu, generateMenu, menuCount, setMenuCount, todayKey } = useLunch()
+  const { dailyMenu, generateMenu, menuCount, setMenuCount, todayKey, menuHistory } = useLunch()
+  const [historyVisible, setHistoryVisible] = useState(false)
   const groupedMenu = useMemo(() => {
     return dailyMenu.items.reduce((groups, dish) => {
       const category = dish.category || '未分类'
@@ -63,8 +64,8 @@ export default function GeneratorPage() {
               <Button type="primary" icon={<FireOutlined />} onClick={() => generateMenu(true)}>
                 重新生成
               </Button>
-              <Button icon={<SyncOutlined />} onClick={() => generateMenu(false)}>
-                沿用当天结果
+              <Button icon={<HistoryOutlined />} onClick={() => setHistoryVisible(true)}>
+                历史记录
               </Button>
             </Space>
           </Col>
@@ -134,6 +135,70 @@ export default function GeneratorPage() {
           <Empty description="还没有可生成的菜品，先去菜品库添加内容吧" />
         )}
       </Card>
+
+      <Modal
+        title="历史记录"
+        open={historyVisible}
+        onCancel={() => setHistoryVisible(false)}
+        footer={null}
+        width={800}
+      >
+        {menuHistory && menuHistory.length > 0 ? (
+          <Space direction="vertical" size={16} style={{ width: '100%' }}>
+            {menuHistory.map((history, index) => {
+              const categoryOrder = ['主食', '荤菜', '素菜', '汤', '未分类']
+              const sortedDishes = [...history.items].sort((a, b) => {
+                const indexA = categoryOrder.indexOf(a.category || '未分类')
+                const indexB = categoryOrder.indexOf(b.category || '未分类')
+                if (indexA === -1 && indexB === -1) return 0
+                if (indexA === -1) return 1
+                if (indexB === -1) return -1
+                return indexA - indexB
+              })
+
+              return (
+                <Card key={history.id} size="small">
+                  <div className="history-item">
+                    <div className="history-header">
+                      <Typography.Text strong>
+                        第 {menuHistory.length - index} 次生成 - {history.date}
+                      </Typography.Text>
+                      <Tag color="blue">{history.menuCount || history.items.length} 道菜</Tag>
+                    </div>
+                    <div className="history-dishes">
+                      {sortedDishes.map((dish) => {
+                        let tagColor = 'default'
+                        let tagStyle = {}
+
+                        // 主食和汤品淡化处理，不做温度颜色区分
+                        if (dish.category === '主食' || dish.category === '汤') {
+                          tagColor = 'default'
+                        } else {
+                          // 荤菜和素菜突出显示，并做温度颜色区分
+                          tagColor = 'blue'
+                          if (dish.servingTemperature === '热菜') {
+                            tagStyle = { backgroundColor: '#fff2f0', borderColor: '#ffccc7', color: '#ff4d4f' }
+                          } else if (dish.servingTemperature === '冷菜') {
+                            tagStyle = { backgroundColor: '#e6f7ff', borderColor: '#91d5ff', color: '#1890ff' }
+                          }
+                        }
+
+                        return (
+                          <Tag key={dish.id} color={tagColor} size="small" style={{ margin: '4px', ...tagStyle }}>
+                            {dish.name}
+                          </Tag>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </Card>
+              )
+            })}
+          </Space>
+        ) : (
+          <Empty description="还没有历史记录" />
+        )}
+      </Modal>
     </Space>
   )
 }

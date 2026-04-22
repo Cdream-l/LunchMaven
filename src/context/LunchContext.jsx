@@ -3,7 +3,7 @@ import { defaultDishes } from '../data/defaultDishes'
 import { normalizeHistoricalDish } from '../shared/algorithms/dishProfile'
 import { normalizeTags, todayKey } from '../shared/algorithms/menu'
 import { generateBalancedMenu } from '../shared/algorithms/menuPlanner'
-import { loadLunchState, saveDailyMenu, saveDishes, saveMenuCount } from '../shared/storage/lunchDb'
+import { loadLunchState, saveDailyMenu, saveDishes, saveMenuCount, saveMenuHistory, loadMenuHistory } from '../shared/storage/lunchDb'
 
 const LunchContext = createContext(null)
 
@@ -14,6 +14,7 @@ export function LunchProvider({ children }) {
     date: todayKey(),
     items: generateBalancedMenu(defaultDishes, 3),
   })
+  const [menuHistory, setMenuHistory] = useState([])
   const [isReady, setIsReady] = useState(false)
 
   useEffect(() => {
@@ -37,6 +38,7 @@ export function LunchProvider({ children }) {
           ...storedState.dailyMenu,
           items: (storedState.dailyMenu.items || []).map(normalizeHistoricalDish),
         }
+        const nextMenuHistory = (await loadMenuHistory()) || []
 
         if (nextDailyMenu.date !== todayKey()) {
           nextDailyMenu = {
@@ -49,6 +51,7 @@ export function LunchProvider({ children }) {
           setDishes(nextDishes)
           setMenuCount(nextMenuCount)
           setDailyMenu(nextDailyMenu)
+          setMenuHistory(nextMenuHistory)
           setIsReady(true)
         }
       } catch {
@@ -156,10 +159,24 @@ export function LunchProvider({ children }) {
       return
     }
 
-    setDailyMenu({
+    const newMenu = {
       date: todayKey(),
       items: generateBalancedMenu(dishes, menuCount),
-    })
+    }
+
+    setDailyMenu(newMenu)
+
+    // 保存历史记录（保留最近 10 条）
+    const newHistory = {
+      id: crypto.randomUUID(),
+      date: todayKey(),
+      items: newMenu.items,
+      menuCount,
+      createdAt: new Date().toISOString(),
+    }
+    const updatedHistory = [newHistory, ...menuHistory].slice(0, 10)
+    setMenuHistory(updatedHistory)
+    saveMenuHistory(updatedHistory)
   }
 
   function resetLibrary() {
@@ -186,6 +203,7 @@ export function LunchProvider({ children }) {
     dishes,
     isReady,
     menuCount,
+    menuHistory,
     stats,
     addDish,
     generateMenu,

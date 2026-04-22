@@ -6,6 +6,7 @@ const STATE_KEYS = {
   dailyMenu: 'dailyMenu',
   dishes: 'dishes',
   menuCount: 'menuCount',
+  menuHistory: 'menuHistory',
 }
 
 function openDb() {
@@ -91,4 +92,12 @@ export function saveDailyMenu(dailyMenu) {
 
 export function saveMenuCount(menuCount) {
   return setValue(STATE_KEYS.menuCount, menuCount)
+}
+
+export function saveMenuHistory(menuHistory) {
+  return setValue(STATE_KEYS.menuHistory, menuHistory)
+}
+
+export function loadMenuHistory() {
+  return getValue(STATE_KEYS.menuHistory)
 }
