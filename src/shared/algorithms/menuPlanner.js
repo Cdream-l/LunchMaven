@@ -48,6 +48,8 @@ export function generateBalancedMenu(dishes, count, options = {}) {
   const vegPool = getCategoryPool(dishes, '素菜')
   const coldPool = getTemperaturePool(dishes, '冷菜')
   const hotPool = getTemperaturePool(dishes, '热菜')
+  const staplePool = getCategoryPool(dishes, '主食')
+  const soupPool = getCategoryPool(dishes, '汤')
 
   const mustHavePools = []
 
@@ -75,10 +77,26 @@ export function generateBalancedMenu(dishes, count, options = {}) {
   })
 
   if (selected.length >= safeCount) {
-    return selected.slice(0, safeCount)
+    // 第二阶段：添加主食（如果有）
+    if (staplePool.length) {
+      const staple = takeOne(staplePool, selectedIds)
+      if (staple) {
+        selected.push(staple)
+      }
+    }
+
+    // 第三阶段：添加汤品（如果有）
+    if (soupPool.length) {
+      const soup = takeOne(soupPool, selectedIds)
+      if (soup) {
+        selected.push(soup)
+      }
+    }
+
+    return selected
   }
 
-  // 第二阶段：按目标热量接近程度补齐，控制整体热量波动。
+  // 第四阶段：按目标热量接近程度补齐，控制整体热量波动。
   const remaining = dishes.filter((dish) => !selectedIds.has(dish.id))
   const byCalories = sortByCaloriesGap(remaining, targetAverageCalories)
 
@@ -90,12 +108,27 @@ export function generateBalancedMenu(dishes, count, options = {}) {
   })
 
   if (selected.length < safeCount) {
-    // 第三阶段兜底：在极端数据下仍保证返回固定数量菜品。
+    // 第五阶段兜底：在极端数据下仍保证返回固定数量菜品。
     const fallback = pickRandomItems(
       dishes.filter((dish) => !selectedIds.has(dish.id)),
       safeCount - selected.length,
     )
     selected.push(...fallback)
+  }
+
+  // 第六阶段：添加主食和汤品（如果有）
+  if (staplePool.length) {
+    const staple = takeOne(staplePool, selectedIds)
+    if (staple) {
+      selected.push(staple)
+    }
+  }
+
+  if (soupPool.length) {
+    const soup = takeOne(soupPool, selectedIds)
+    if (soup) {
+      selected.push(soup)
+    }
   }
 
   return selected
