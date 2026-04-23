@@ -22,6 +22,7 @@ export default function GeneratorPage() {
   const {
     dailyMenu,
     generateMenu,
+    lastMenuRequest,
     menuCount,
     menuHistory,
     menuRequest,
@@ -102,7 +103,21 @@ export default function GeneratorPage() {
         </Row>
 
         <div className="menu-request-block">
-          <Typography.Text strong>自由描述</Typography.Text>
+          <div className="menu-request-header">
+            <Typography.Text strong>自由描述</Typography.Text>
+            <Space wrap size={[8, 8]}>
+              {lastMenuRequest ? (
+                <Button size="small" onClick={() => setMenuRequest(lastMenuRequest)}>
+                  插入上次描述
+                </Button>
+              ) : null}
+              {menuRequest ? (
+                <Button size="small" type="text" onClick={() => setMenuRequest('')}>
+                  清空
+                </Button>
+              ) : null}
+            </Space>
+          </div>
           <TextArea
             value={menuRequest}
             onChange={(event) => setMenuRequest(event.target.value)}
@@ -115,6 +130,7 @@ export default function GeneratorPage() {
             <Tag color={requestAnalysis.hasQuantityIntent ? 'processing' : 'default'}>
               {requestAnalysis.hasQuantityIntent ? '数量以自由描述为准' : '数量以“几道菜”选项为准'}
             </Tag>
+            {lastMenuRequest ? <Tag>上次描述已保存</Tag> : null}
             {requestAnalysis.summary ? <Tag color="gold">{requestAnalysis.summary}</Tag> : null}
           </Space>
           {requestAnalysis.hasRequest ? (

@@ -8,6 +8,7 @@ const STATE_KEYS = {
   menuCount: 'menuCount',
   menuHistory: 'menuHistory',
   menuRequest: 'menuRequest',
+  lastMenuRequest: 'lastMenuRequest',
   dishLibraryVersion: 'dishLibraryVersion',
 }
 
@@ -71,11 +72,12 @@ function setValue(key, value) {
 }
 
 export async function loadLunchState(fallbackState) {
-  const [dishes, dailyMenu, menuCount, menuRequest, dishLibraryVersion] = await Promise.all([
+  const [dishes, dailyMenu, menuCount, menuRequest, lastMenuRequest, dishLibraryVersion] = await Promise.all([
     getValue(STATE_KEYS.dishes),
     getValue(STATE_KEYS.dailyMenu),
     getValue(STATE_KEYS.menuCount),
     getValue(STATE_KEYS.menuRequest),
+    getValue(STATE_KEYS.lastMenuRequest),
     getValue(STATE_KEYS.dishLibraryVersion),
   ])
 
@@ -84,6 +86,7 @@ export async function loadLunchState(fallbackState) {
     dishes: dishes ?? fallbackState.dishes,
     menuCount: menuCount ?? fallbackState.menuCount,
     menuRequest: menuRequest ?? fallbackState.menuRequest,
+    lastMenuRequest: lastMenuRequest ?? fallbackState.lastMenuRequest,
     dishLibraryVersion: dishLibraryVersion ?? fallbackState.dishLibraryVersion,
   }
 }
@@ -106,6 +109,10 @@ export function saveMenuHistory(menuHistory) {
 
 export function saveMenuRequest(menuRequest) {
   return setValue(STATE_KEYS.menuRequest, menuRequest)
+}
+
+export function saveLastMenuRequest(lastMenuRequest) {
+  return setValue(STATE_KEYS.lastMenuRequest, lastMenuRequest)
 }
 
 export function saveDishLibraryVersion(dishLibraryVersion) {

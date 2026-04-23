@@ -9,6 +9,7 @@ import {
   loadMenuHistory,
   saveDailyMenu,
   saveDishes,
+  saveLastMenuRequest,
   saveMenuCount,
   saveMenuHistory,
   saveMenuRequest,
@@ -48,6 +49,7 @@ export function LunchProvider({ children }) {
   const [dishes, setDishes] = useState(defaultDishes)
   const [menuCount, setMenuCount] = useState(3)
   const [menuRequest, setMenuRequest] = useState('')
+  const [lastMenuRequest, setLastMenuRequest] = useState('')
   const [dishLibraryVersion, setDishLibraryVersion] = useState(DEFAULT_DISH_LIBRARY_VERSION)
   const [dailyMenu, setDailyMenu] = useState(() => buildDailyMenuPayload(defaultDishes, 3, ''))
   const [menuHistory, setMenuHistory] = useState([])
@@ -62,6 +64,7 @@ export function LunchProvider({ children }) {
         dailyMenu: buildDailyMenuPayload(defaultDishes, 3, ''),
         menuCount: 3,
         menuRequest: '',
+        lastMenuRequest: '',
         dishLibraryVersion: DEFAULT_DISH_LIBRARY_VERSION,
       }
 
@@ -76,6 +79,7 @@ export function LunchProvider({ children }) {
         const nextDishes = sourceDishes.map(normalizeHistoricalDish)
         const nextMenuCount = storedState.menuCount || 3
         const nextMenuRequest = storedState.menuRequest || ''
+        const nextLastMenuRequest = storedState.lastMenuRequest || ''
         const nextDishLibraryVersion = shouldUpgrade
           ? DEFAULT_DISH_LIBRARY_VERSION
           : storedState.dishLibraryVersion || DEFAULT_DISH_LIBRARY_VERSION
@@ -96,6 +100,7 @@ export function LunchProvider({ children }) {
           setDishLibraryVersion(nextDishLibraryVersion)
           setMenuCount(nextMenuCount)
           setMenuRequest(nextMenuRequest)
+          setLastMenuRequest(nextLastMenuRequest)
           setDailyMenu(nextDailyMenu)
           setMenuHistory(nextMenuHistory)
           setIsReady(true)
@@ -168,6 +173,14 @@ export function LunchProvider({ children }) {
 
     saveMenuRequest(menuRequest)
   }, [isReady, menuRequest])
+
+  useEffect(() => {
+    if (!isReady) {
+      return
+    }
+
+    saveLastMenuRequest(lastMenuRequest)
+  }, [isReady, lastMenuRequest])
 
   const categories = useMemo(
     () => ['全部', ...new Set(dishes.map((dish) => dish.category).filter(Boolean))],
@@ -267,6 +280,8 @@ export function LunchProvider({ children }) {
 
     const newMenu = buildDailyMenuPayload(dishes, menuCount, menuRequest)
     setDailyMenu(newMenu)
+    setLastMenuRequest(menuRequest.trim())
+    setMenuRequest('')
 
     const newHistory = {
       id: crypto.randomUUID(),
@@ -304,6 +319,7 @@ export function LunchProvider({ children }) {
     menuCount,
     menuHistory,
     menuRequest,
+    lastMenuRequest,
     requestAnalysis,
     stats,
     addDish,
@@ -314,6 +330,7 @@ export function LunchProvider({ children }) {
     replaceDishes,
     resetLibrary,
     setMenuCount,
+    setLastMenuRequest,
     setMenuRequest,
     todayKey,
   }
