@@ -277,7 +277,7 @@ export function LunchProvider({ children }) {
       requestMeta: newMenu.requestMeta,
       createdAt: new Date().toISOString(),
     }
-    const updatedHistory = [newHistory, ...menuHistory].slice(0, 10)
+    const updatedHistory = [newHistory, ...menuHistory]
     setMenuHistory(updatedHistory)
     saveMenuHistory(updatedHistory)
   }

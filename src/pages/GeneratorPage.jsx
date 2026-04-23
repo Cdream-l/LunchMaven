@@ -32,6 +32,8 @@ export default function GeneratorPage() {
   } = useLunch()
   const [historyVisible, setHistoryVisible] = useState(false)
 
+  const recentMenuHistory = useMemo(() => menuHistory.slice(0, 10), [menuHistory])
+
   const groupedMenu = useMemo(
     () =>
       dailyMenu.items.reduce((groups, dish) => {
@@ -208,10 +210,10 @@ export default function GeneratorPage() {
         )}
       </Card>
 
-      <Modal title="历史记录" open={historyVisible} onCancel={() => setHistoryVisible(false)} footer={null} width={800}>
-        {menuHistory && menuHistory.length > 0 ? (
+      <Modal title="历史记录（最近 10 次）" open={historyVisible} onCancel={() => setHistoryVisible(false)} footer={null} width={800}>
+        {recentMenuHistory.length > 0 ? (
           <Space direction="vertical" size={16} style={{ width: '100%' }}>
-            {menuHistory.map((history, index) => {
+            {recentMenuHistory.map((history, index) => {
               const sortedDishes = [...history.items].sort((left, right) => {
                 const leftIndex = CATEGORY_ORDER.indexOf(left.category || '未分类')
                 const rightIndex = CATEGORY_ORDER.indexOf(right.category || '未分类')
@@ -242,7 +244,9 @@ export default function GeneratorPage() {
                         {history.requestMeta?.requestedDishCount || history.menuCount || history.items.length} 道菜
                       </Tag>
                     </div>
-                    {history.requestMeta?.summary ? <Typography.Text type="secondary">依据：{history.requestMeta.summary}</Typography.Text> : null}
+                    {history.requestMeta?.summary ? (
+                      <Typography.Text type="secondary">依据：{history.requestMeta.summary}</Typography.Text>
+                    ) : null}
                     <div className="history-dishes">
                       {sortedDishes.map((dish) => {
                         let tagColor = 'default'
@@ -252,6 +256,7 @@ export default function GeneratorPage() {
                           tagColor = 'default'
                         } else {
                           tagColor = 'blue'
+
                           if (dish.servingTemperature === '热菜') {
                             tagStyle = { backgroundColor: '#fff2f0', borderColor: '#ffccc7', color: '#ff4d4f' }
                           } else if (dish.servingTemperature === '冷菜') {
