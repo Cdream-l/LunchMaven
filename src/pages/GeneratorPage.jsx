@@ -1,7 +1,10 @@
 import { FireOutlined, HistoryOutlined } from '@ant-design/icons'
-import { Button, Card, Col, Empty, Modal, Row, Select, Space, Tag, Typography } from 'antd'
+import { Alert, Button, Card, Col, Empty, Input, Modal, Row, Select, Space, Tag, Typography } from 'antd'
 import { useMemo, useState } from 'react'
 import { useLunch } from '../context/LunchContext'
+
+const { TextArea } = Input
+const CATEGORY_ORDER = ['主食', '荤菜', '素菜', '汤', '未分类']
 
 function getCaloriesLevelMeta(calories) {
   if (calories <= 220) {
@@ -16,50 +19,75 @@ function getCaloriesLevelMeta(calories) {
 }
 
 export default function GeneratorPage() {
-  const { dailyMenu, generateMenu, menuCount, setMenuCount, todayKey, menuHistory } = useLunch()
+  const {
+    dailyMenu,
+    generateMenu,
+    menuCount,
+    menuHistory,
+    menuRequest,
+    requestAnalysis,
+    setMenuCount,
+    setMenuRequest,
+    todayKey,
+  } = useLunch()
   const [historyVisible, setHistoryVisible] = useState(false)
-  const groupedMenu = useMemo(() => {
-    return dailyMenu.items.reduce((groups, dish) => {
-      const category = dish.category || '未分类'
 
-      if (!groups[category]) {
-        groups[category] = []
-      }
+  const groupedMenu = useMemo(
+    () =>
+      dailyMenu.items.reduce((groups, dish) => {
+        const category = dish.category || '未分类'
 
-      groups[category].push(dish)
-      return groups
-    }, {})
-  }, [dailyMenu.items])
+        if (!groups[category]) {
+          groups[category] = []
+        }
 
-  const sortedCategories = useMemo(() => {
-    const categoryOrder = ['主食', '荤菜', '素菜', '汤', '未分类']
-    return Object.keys(groupedMenu).sort((a, b) => {
-      const indexA = categoryOrder.indexOf(a)
-      const indexB = categoryOrder.indexOf(b)
-      if (indexA === -1 && indexB === -1) return a.localeCompare(b)
-      if (indexA === -1) return 1
-      if (indexB === -1) return -1
-      return indexA - indexB
-    })
-  }, [groupedMenu])
+        groups[category].push(dish)
+        return groups
+      }, {}),
+    [dailyMenu.items],
+  )
+
+  const sortedCategories = useMemo(
+    () =>
+      Object.keys(groupedMenu).sort((left, right) => {
+        const leftIndex = CATEGORY_ORDER.indexOf(left)
+        const rightIndex = CATEGORY_ORDER.indexOf(right)
+
+        if (leftIndex === -1 && rightIndex === -1) {
+          return left.localeCompare(right, 'zh-CN')
+        }
+
+        if (leftIndex === -1) {
+          return 1
+        }
+
+        if (rightIndex === -1) {
+          return -1
+        }
+
+        return leftIndex - rightIndex
+      }),
+    [groupedMenu],
+  )
 
   return (
     <Space direction="vertical" size={24} className="page-stack">
       <Card>
-        <Row gutter={[16, 16]} align="middle" justify="space-between">
-          <Col xs={24} lg={14}>
+        <Row gutter={[16, 16]} align="top" justify="space-between">
+          <Col xs={24} lg={13}>
             <Typography.Title level={2}>今日菜单</Typography.Title>
             <Typography.Paragraph>
-              选择菜品数量后，系统会生成对应数量的荤菜+素菜，再自动添加1道主食和1道汤品，确保营养均衡。
+              可以直接用自然语言描述人数、口味和忌口。系统会优先按你的描述匹配菜品，匹配不足时再回退到原有的均衡生成逻辑。
             </Typography.Paragraph>
           </Col>
-          <Col xs={24} lg={10}>
+          <Col xs={24} lg={11}>
             <Space wrap className="generator-actions">
               <Select
                 value={menuCount}
                 options={[1, 2, 3, 4, 5].map((value) => ({ value, label: `${value} 道菜` }))}
                 onChange={setMenuCount}
                 style={{ minWidth: 120 }}
+                disabled={requestAnalysis.hasQuantityIntent}
               />
               <Button type="primary" icon={<FireOutlined />} onClick={() => generateMenu(true)}>
                 重新生成
@@ -70,17 +98,57 @@ export default function GeneratorPage() {
             </Space>
           </Col>
         </Row>
+
+        <div className="menu-request-block">
+          <Typography.Text strong>自由描述</Typography.Text>
+          <TextArea
+            value={menuRequest}
+            onChange={(event) => setMenuRequest(event.target.value)}
+            rows={4}
+            maxLength={200}
+            placeholder="例如：5个人，少油，不吃面条，忌口羊肉，最好有汤；或：4个人，多点素菜，不要辣，别来汤，下饭一点"
+            className="menu-request-input"
+          />
+          <Space wrap size={[8, 8]}>
+            <Tag color={requestAnalysis.hasQuantityIntent ? 'processing' : 'default'}>
+              {requestAnalysis.hasQuantityIntent ? '数量以自由描述为准' : '数量以“几道菜”选项为准'}
+            </Tag>
+            {requestAnalysis.summary ? <Tag color="gold">{requestAnalysis.summary}</Tag> : null}
+          </Space>
+          {requestAnalysis.hasRequest ? (
+            <Alert
+              type="info"
+              showIcon
+              className="menu-request-alert"
+              message={
+                requestAnalysis.hasQuantityIntent
+                  ? '检测到人数或菜数要求，已覆盖上方“几道菜”选项。'
+                  : '未检测到数量要求，仍按上方“几道菜”选项控制生成规模。'
+              }
+            />
+          ) : null}
+        </div>
       </Card>
 
       <Card
         title={dailyMenu.date === todayKey() ? '今天的菜单结果' : '还没有今天的结果'}
         extra={<Tag color="gold">{dailyMenu.date}</Tag>}
       >
+        {dailyMenu.requestMeta?.summary ? (
+          <Alert
+            type="success"
+            showIcon
+            className="menu-request-result"
+            message={`本次生成依据：${dailyMenu.requestMeta.summary}`}
+          />
+        ) : null}
+
         {dailyMenu.items.length ? (
           <div className="menu-layout-container">
             <Row gutter={[16, 0]} className="menu-categories-row">
               {sortedCategories.map((category) => {
                 const dishes = groupedMenu[category]
+
                 return (
                   <Col key={category} xs={24} sm={12} md={8} lg={6} className="menu-category-col">
                     <div className="menu-category-card">
@@ -104,7 +172,9 @@ export default function GeneratorPage() {
                                   <Tag color={dish.servingTemperature === '热菜' ? 'red' : dish.servingTemperature === '冷菜' ? 'cyan' : 'default'}>
                                     {dish.servingTemperature === '热菜' ? '热' : dish.servingTemperature === '冷菜' ? '冷' : '待定'}
                                   </Tag>
-                                  <Typography.Text strong className="dish-name-text">{dish.name}</Typography.Text>
+                                  <Typography.Text strong className="dish-name-text">
+                                    {dish.name}
+                                  </Typography.Text>
                                 </div>
                                 <Tag color={caloriesMeta.color} size="small">
                                   {dish.calories} kcal
@@ -114,7 +184,9 @@ export default function GeneratorPage() {
                                 <Space size={4} wrap>
                                   {dish.tags && dish.tags.length ? (
                                     dish.tags.map((tag) => (
-                                      <Tag key={`${dish.id}-${tag}`} size="small">{tag}</Tag>
+                                      <Tag key={`${dish.id}-${tag}`} size="small">
+                                        {tag}
+                                      </Tag>
                                     ))
                                   ) : (
                                     <Tag size="small">待补充标签</Tag>
@@ -136,24 +208,27 @@ export default function GeneratorPage() {
         )}
       </Card>
 
-      <Modal
-        title="历史记录"
-        open={historyVisible}
-        onCancel={() => setHistoryVisible(false)}
-        footer={null}
-        width={800}
-      >
+      <Modal title="历史记录" open={historyVisible} onCancel={() => setHistoryVisible(false)} footer={null} width={800}>
         {menuHistory && menuHistory.length > 0 ? (
           <Space direction="vertical" size={16} style={{ width: '100%' }}>
             {menuHistory.map((history, index) => {
-              const categoryOrder = ['主食', '荤菜', '素菜', '汤', '未分类']
-              const sortedDishes = [...history.items].sort((a, b) => {
-                const indexA = categoryOrder.indexOf(a.category || '未分类')
-                const indexB = categoryOrder.indexOf(b.category || '未分类')
-                if (indexA === -1 && indexB === -1) return 0
-                if (indexA === -1) return 1
-                if (indexB === -1) return -1
-                return indexA - indexB
+              const sortedDishes = [...history.items].sort((left, right) => {
+                const leftIndex = CATEGORY_ORDER.indexOf(left.category || '未分类')
+                const rightIndex = CATEGORY_ORDER.indexOf(right.category || '未分类')
+
+                if (leftIndex === -1 && rightIndex === -1) {
+                  return 0
+                }
+
+                if (leftIndex === -1) {
+                  return 1
+                }
+
+                if (rightIndex === -1) {
+                  return -1
+                }
+
+                return leftIndex - rightIndex
               })
 
               return (
@@ -163,18 +238,19 @@ export default function GeneratorPage() {
                       <Typography.Text strong>
                         第 {menuHistory.length - index} 次生成 - {history.date}
                       </Typography.Text>
-                      <Tag color="blue">{history.menuCount || history.items.length} 道菜</Tag>
+                      <Tag color="blue">
+                        {history.requestMeta?.requestedDishCount || history.menuCount || history.items.length} 道菜
+                      </Tag>
                     </div>
+                    {history.requestMeta?.summary ? <Typography.Text type="secondary">依据：{history.requestMeta.summary}</Typography.Text> : null}
                     <div className="history-dishes">
                       {sortedDishes.map((dish) => {
                         let tagColor = 'default'
                         let tagStyle = {}
 
-                        // 主食和汤品淡化处理，不做温度颜色区分
                         if (dish.category === '主食' || dish.category === '汤') {
                           tagColor = 'default'
                         } else {
-                          // 荤菜和素菜突出显示，并做温度颜色区分
                           tagColor = 'blue'
                           if (dish.servingTemperature === '热菜') {
                             tagStyle = { backgroundColor: '#fff2f0', borderColor: '#ffccc7', color: '#ff4d4f' }

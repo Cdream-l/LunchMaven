@@ -117,6 +117,30 @@ body {
   justify-content: flex-end;
 }
 
+.menu-request-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.menu-request-input.ant-input {
+  border-radius: 14px;
+  background: rgba(255, 252, 246, 0.9);
+}
+
+.menu-request-input.ant-input:focus,
+.menu-request-input.ant-input-focused {
+  box-shadow: 0 0 0 2px rgba(250, 140, 22, 0.12);
+}
+
+.menu-request-alert,
+.menu-request-result {
+  border-radius: 14px;
+}
+
 .menu-result-card {
   min-height: 200px;
   background: linear-gradient(160deg, #fffaf2, #fff1dc) !important;

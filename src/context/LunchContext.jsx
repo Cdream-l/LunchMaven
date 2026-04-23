@@ -2,18 +2,40 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { defaultDishes } from '../data/defaultDishes'
 import { normalizeHistoricalDish } from '../shared/algorithms/dishProfile'
 import { normalizeTags, todayKey } from '../shared/algorithms/menu'
-import { generateBalancedMenu } from '../shared/algorithms/menuPlanner'
-import { loadLunchState, saveDailyMenu, saveDishes, saveMenuCount, saveMenuHistory, loadMenuHistory } from '../shared/storage/lunchDb'
+import { analyzeMenuRequest, generateBalancedMenu } from '../shared/algorithms/menuPlanner'
+import {
+  loadLunchState,
+  loadMenuHistory,
+  saveDailyMenu,
+  saveDishes,
+  saveMenuCount,
+  saveMenuHistory,
+  saveMenuRequest,
+} from '../shared/storage/lunchDb'
 
 const LunchContext = createContext(null)
+
+function buildDailyMenuPayload(dishes, menuCount, requestText) {
+  const requestAnalysis = analyzeMenuRequest(requestText, menuCount)
+
+  return {
+    date: todayKey(),
+    items: generateBalancedMenu(dishes, menuCount, { requestText }),
+    requestText,
+    requestMeta: {
+      hasQuantityIntent: requestAnalysis.hasQuantityIntent,
+      requestedDishCount: requestAnalysis.requestedDishCount,
+      summary: requestAnalysis.summary,
+      selectorEnabled: requestAnalysis.selectorEnabled,
+    },
+  }
+}
 
 export function LunchProvider({ children }) {
   const [dishes, setDishes] = useState(defaultDishes)
   const [menuCount, setMenuCount] = useState(3)
-  const [dailyMenu, setDailyMenu] = useState({
-    date: todayKey(),
-    items: generateBalancedMenu(defaultDishes, 3),
-  })
+  const [menuRequest, setMenuRequest] = useState('')
+  const [dailyMenu, setDailyMenu] = useState(() => buildDailyMenuPayload(defaultDishes, 3, ''))
   const [menuHistory, setMenuHistory] = useState([])
   const [isReady, setIsReady] = useState(false)
 
@@ -23,33 +45,32 @@ export function LunchProvider({ children }) {
     async function hydrateState() {
       const fallbackState = {
         dishes: defaultDishes,
-        dailyMenu: {
-          date: todayKey(),
-          items: generateBalancedMenu(defaultDishes, 3),
-        },
+        dailyMenu: buildDailyMenuPayload(defaultDishes, 3, ''),
         menuCount: 3,
+        menuRequest: '',
       }
 
       try {
         const storedState = await loadLunchState(fallbackState)
         const nextDishes = (storedState.dishes.length ? storedState.dishes : defaultDishes).map(normalizeHistoricalDish)
         const nextMenuCount = storedState.menuCount || 3
+        const nextMenuRequest = storedState.menuRequest || ''
         let nextDailyMenu = {
           ...storedState.dailyMenu,
           items: (storedState.dailyMenu.items || []).map(normalizeHistoricalDish),
+          requestText: storedState.dailyMenu.requestText ?? nextMenuRequest,
+          requestMeta: storedState.dailyMenu.requestMeta ?? null,
         }
         const nextMenuHistory = (await loadMenuHistory()) || []
 
         if (nextDailyMenu.date !== todayKey()) {
-          nextDailyMenu = {
-            date: todayKey(),
-            items: generateBalancedMenu(nextDishes, nextMenuCount),
-          }
+          nextDailyMenu = buildDailyMenuPayload(nextDishes, nextMenuCount, nextMenuRequest)
         }
 
         if (!cancelled) {
           setDishes(nextDishes)
           setMenuCount(nextMenuCount)
+          setMenuRequest(nextMenuRequest)
           setDailyMenu(nextDailyMenu)
           setMenuHistory(nextMenuHistory)
           setIsReady(true)
@@ -82,20 +103,14 @@ export function LunchProvider({ children }) {
     }
 
     if (dailyMenu.date !== todayKey()) {
-      setDailyMenu({
-        date: todayKey(),
-        items: generateBalancedMenu(dishes, menuCount),
-      })
+      setDailyMenu(buildDailyMenuPayload(dishes, menuCount, menuRequest))
       return
     }
 
     if (!dailyMenu.items.length && dishes.length) {
-      setDailyMenu({
-        date: todayKey(),
-        items: generateBalancedMenu(dishes, menuCount),
-      })
+      setDailyMenu(buildDailyMenuPayload(dishes, menuCount, menuRequest))
     }
-  }, [dailyMenu.date, dailyMenu.items.length, dishes, isReady, menuCount])
+  }, [dailyMenu.date, dailyMenu.items.length, dishes, isReady, menuCount, menuRequest])
 
   useEffect(() => {
     if (!isReady) {
@@ -113,6 +128,14 @@ export function LunchProvider({ children }) {
     saveMenuCount(menuCount)
   }, [isReady, menuCount])
 
+  useEffect(() => {
+    if (!isReady) {
+      return
+    }
+
+    saveMenuRequest(menuRequest)
+  }, [isReady, menuRequest])
+
   const categories = useMemo(
     () => ['全部', ...new Set(dishes.map((dish) => dish.category).filter(Boolean))],
     [dishes],
@@ -126,6 +149,8 @@ export function LunchProvider({ children }) {
     }),
     [categories.length, dishes],
   )
+
+  const requestAnalysis = useMemo(() => analyzeMenuRequest(menuRequest, menuCount), [menuCount, menuRequest])
 
   function addDish(values) {
     const nextTags = Array.isArray(values.tags) ? values.tags : normalizeTags(values.tags || '')
@@ -151,7 +176,7 @@ export function LunchProvider({ children }) {
 
   function generateMenu(force = false) {
     if (!dishes.length) {
-      setDailyMenu({ date: todayKey(), items: [] })
+      setDailyMenu({ date: todayKey(), items: [], requestText: menuRequest, requestMeta: null })
       return
     }
 
@@ -159,19 +184,16 @@ export function LunchProvider({ children }) {
       return
     }
 
-    const newMenu = {
-      date: todayKey(),
-      items: generateBalancedMenu(dishes, menuCount),
-    }
-
+    const newMenu = buildDailyMenuPayload(dishes, menuCount, menuRequest)
     setDailyMenu(newMenu)
 
-    // 保存历史记录（保留最近 10 条）
     const newHistory = {
       id: crypto.randomUUID(),
       date: todayKey(),
       items: newMenu.items,
       menuCount,
+      requestText: menuRequest,
+      requestMeta: newMenu.requestMeta,
       createdAt: new Date().toISOString(),
     }
     const updatedHistory = [newHistory, ...menuHistory].slice(0, 10)
@@ -181,20 +203,14 @@ export function LunchProvider({ children }) {
 
   function resetLibrary() {
     setDishes(defaultDishes)
-    setDailyMenu({
-      date: todayKey(),
-      items: generateBalancedMenu(defaultDishes, menuCount),
-    })
+    setDailyMenu(buildDailyMenuPayload(defaultDishes, menuCount, menuRequest))
   }
 
   function replaceDishes(nextDishes) {
     const normalizedDishes = nextDishes.map(normalizeHistoricalDish)
 
     setDishes(normalizedDishes)
-    setDailyMenu({
-      date: todayKey(),
-      items: generateBalancedMenu(normalizedDishes, menuCount),
-    })
+    setDailyMenu(buildDailyMenuPayload(normalizedDishes, menuCount, menuRequest))
   }
 
   const value = {
@@ -204,6 +220,8 @@ export function LunchProvider({ children }) {
     isReady,
     menuCount,
     menuHistory,
+    menuRequest,
+    requestAnalysis,
     stats,
     addDish,
     generateMenu,
@@ -211,6 +229,7 @@ export function LunchProvider({ children }) {
     replaceDishes,
     resetLibrary,
     setMenuCount,
+    setMenuRequest,
     todayKey,
   }
 

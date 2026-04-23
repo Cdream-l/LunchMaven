@@ -7,6 +7,7 @@ const STATE_KEYS = {
   dishes: 'dishes',
   menuCount: 'menuCount',
   menuHistory: 'menuHistory',
+  menuRequest: 'menuRequest',
 }
 
 function openDb() {
@@ -69,16 +70,18 @@ function setValue(key, value) {
 }
 
 export async function loadLunchState(fallbackState) {
-  const [dishes, dailyMenu, menuCount] = await Promise.all([
+  const [dishes, dailyMenu, menuCount, menuRequest] = await Promise.all([
     getValue(STATE_KEYS.dishes),
     getValue(STATE_KEYS.dailyMenu),
     getValue(STATE_KEYS.menuCount),
+    getValue(STATE_KEYS.menuRequest),
   ])
 
   return {
     dailyMenu: dailyMenu ?? fallbackState.dailyMenu,
     dishes: dishes ?? fallbackState.dishes,
     menuCount: menuCount ?? fallbackState.menuCount,
+    menuRequest: menuRequest ?? fallbackState.menuRequest,
   }
 }
 
@@ -96,6 +99,10 @@ export function saveMenuCount(menuCount) {
 
 export function saveMenuHistory(menuHistory) {
   return setValue(STATE_KEYS.menuHistory, menuHistory)
+}
+
+export function saveMenuRequest(menuRequest) {
+  return setValue(STATE_KEYS.menuRequest, menuRequest)
 }
 
 export function loadMenuHistory() {
