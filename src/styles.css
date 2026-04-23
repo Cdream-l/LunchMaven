@@ -338,6 +338,25 @@ body {
   border-radius: 14px;
 }
 
+.menu-feedback-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.82);
+}
+
+.menu-feedback-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .menu-result-card {
   min-height: 200px;
   background: linear-gradient(160deg, #fffaf2, #fff1dc) !important;

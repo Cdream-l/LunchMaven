@@ -29,6 +29,7 @@ export default function GeneratorPage() {
     requestAnalysis,
     setMenuCount,
     setMenuRequest,
+    submitMenuFeedback,
     todayKey,
   } = useLunch()
   const [historyVisible, setHistoryVisible] = useState(false)
@@ -152,6 +153,31 @@ export default function GeneratorPage() {
         title={dailyMenu.date === todayKey() ? '今天的菜单结果' : '还没有今天的结果'}
         extra={<Tag color="gold">{dailyMenu.date}</Tag>}
       >
+        {dailyMenu.items.length ? (
+          <div className="menu-feedback-bar">
+            <div className="menu-feedback-copy">
+              <Typography.Text strong>这轮结果请给个反馈</Typography.Text>
+              <Typography.Text type="secondary">
+                满意会帮你沉淀偏好，不满意会在当前条件下立刻重生一轮，并且避开最近 10 次重复结果。
+              </Typography.Text>
+            </div>
+            <Space wrap>
+              <Tag color={dailyMenu.feedback === 'liked' ? 'success' : dailyMenu.feedback === 'disliked' ? 'error' : 'processing'}>
+                {dailyMenu.feedback === 'liked' ? '已满意' : dailyMenu.feedback === 'disliked' ? '已不满意' : '待点评'}
+              </Tag>
+              <Button
+                type={dailyMenu.feedback === 'liked' ? 'primary' : 'default'}
+                onClick={() => submitMenuFeedback('liked')}
+              >
+                满意
+              </Button>
+              <Button danger onClick={() => submitMenuFeedback('disliked')}>
+                不满意，换一组
+              </Button>
+            </Space>
+          </div>
+        ) : null}
+
         {dailyMenu.requestMeta?.summary ? (
           <Alert
             type="success"
@@ -256,9 +282,13 @@ export default function GeneratorPage() {
                       <Typography.Text strong>
                         第 {menuHistory.length - index} 次生成 - {history.date}
                       </Typography.Text>
-                      <Tag color="blue">
-                        {history.requestMeta?.requestedDishCount || history.menuCount || history.items.length} 道菜
-                      </Tag>
+                      <Space wrap size={6}>
+                        <Tag color="blue">
+                          {history.requestMeta?.requestedDishCount || history.menuCount || history.items.length} 道菜
+                        </Tag>
+                        {history.feedback === 'liked' ? <Tag color="success">满意</Tag> : null}
+                        {history.feedback === 'disliked' ? <Tag color="error">不满意</Tag> : null}
+                      </Space>
                     </div>
                     {history.requestMeta?.summary ? (
                       <Typography.Text type="secondary">依据：{history.requestMeta.summary}</Typography.Text>

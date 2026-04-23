@@ -16,6 +16,8 @@ import {
 } from '../shared/storage/lunchDb'
 
 const LunchContext = createContext(null)
+const RECENT_DUPLICATE_WINDOW = 10
+const MAX_UNIQUE_GENERATION_ATTEMPTS = 40
 
 function shouldUpgradeSeedLibrary(storedDishes, storedVersion) {
   if (!Array.isArray(storedDishes) || storedVersion >= DEFAULT_DISH_LIBRARY_VERSION) {
@@ -33,8 +35,10 @@ function buildDailyMenuPayload(dishes, menuCount, requestText) {
   const requestAnalysis = analyzeMenuRequest(requestText, menuCount)
 
   return {
+    id: crypto.randomUUID(),
     date: todayKey(),
     items: generateBalancedMenu(dishes, menuCount, { requestText }),
+    feedback: null,
     requestText,
     requestMeta: {
       hasQuantityIntent: requestAnalysis.hasQuantityIntent,
@@ -43,6 +47,17 @@ function buildDailyMenuPayload(dishes, menuCount, requestText) {
       selectorEnabled: requestAnalysis.selectorEnabled,
     },
   }
+}
+
+function buildMenuSignature(items) {
+  return [...items]
+    .map((dish) => dish.id)
+    .sort()
+    .join('|')
+}
+
+function markHistoryFeedback(history, targetId, feedback) {
+  return history.map((entry) => (entry.id === targetId ? { ...entry, feedback } : entry))
 }
 
 export function LunchProvider({ children }) {
@@ -86,10 +101,16 @@ export function LunchProvider({ children }) {
         let nextDailyMenu = {
           ...storedState.dailyMenu,
           items: (storedState.dailyMenu.items || []).map(normalizeHistoricalDish),
+          id: storedState.dailyMenu.id ?? crypto.randomUUID(),
+          feedback: storedState.dailyMenu.feedback ?? null,
           requestText: storedState.dailyMenu.requestText ?? nextMenuRequest,
           requestMeta: storedState.dailyMenu.requestMeta ?? null,
         }
-        const nextMenuHistory = (await loadMenuHistory()) || []
+        const nextMenuHistory = ((await loadMenuHistory()) || []).map((history) => ({
+          ...history,
+          feedback: history.feedback ?? null,
+          items: (history.items || []).map(normalizeHistoricalDish),
+        }))
 
         if (nextDailyMenu.date !== todayKey()) {
           nextDailyMenu = buildDailyMenuPayload(nextDishes, nextMenuCount, nextMenuRequest)
@@ -198,6 +219,32 @@ export function LunchProvider({ children }) {
 
   const requestAnalysis = useMemo(() => analyzeMenuRequest(menuRequest, menuCount), [menuCount, menuRequest])
 
+  function createUniqueMenu(nextRequestText, recentHistory = menuHistory) {
+    const recentSignatures = new Set(
+      recentHistory
+        .slice(0, RECENT_DUPLICATE_WINDOW)
+        .map((history) => buildMenuSignature(history.items || []))
+        .filter(Boolean),
+    )
+
+    let fallbackMenu = null
+
+    for (let attempt = 0; attempt < MAX_UNIQUE_GENERATION_ATTEMPTS; attempt += 1) {
+      const candidate = buildDailyMenuPayload(dishes, menuCount, nextRequestText)
+      const signature = buildMenuSignature(candidate.items)
+
+      if (!fallbackMenu) {
+        fallbackMenu = candidate
+      }
+
+      if (!recentSignatures.has(signature)) {
+        return candidate
+      }
+    }
+
+    return fallbackMenu || buildDailyMenuPayload(dishes, menuCount, nextRequestText)
+  }
+
   function addDish(values) {
     const nextTags = Array.isArray(values.tags) ? values.tags : normalizeTags(values.tags || '')
     const nextDish = {
@@ -268,9 +315,9 @@ export function LunchProvider({ children }) {
     }))
   }
 
-  function generateMenu(force = false) {
+  function generateMenu(force = false, overrideRequestText, historyBase = menuHistory) {
     if (!dishes.length) {
-      setDailyMenu({ date: todayKey(), items: [], requestText: menuRequest, requestMeta: null })
+      setDailyMenu({ id: crypto.randomUUID(), date: todayKey(), items: [], feedback: null, requestText: menuRequest, requestMeta: null })
       return
     }
 
@@ -278,23 +325,45 @@ export function LunchProvider({ children }) {
       return
     }
 
-    const newMenu = buildDailyMenuPayload(dishes, menuCount, menuRequest)
+    const nextRequestText = typeof overrideRequestText === 'string' ? overrideRequestText : menuRequest
+    const newMenu = createUniqueMenu(nextRequestText, historyBase)
     setDailyMenu(newMenu)
-    setLastMenuRequest(menuRequest.trim())
+    setLastMenuRequest(nextRequestText.trim())
     setMenuRequest('')
 
     const newHistory = {
-      id: crypto.randomUUID(),
+      id: newMenu.id,
       date: todayKey(),
       items: newMenu.items,
+      feedback: null,
       menuCount,
-      requestText: menuRequest,
+      requestText: nextRequestText,
       requestMeta: newMenu.requestMeta,
       createdAt: new Date().toISOString(),
     }
-    const updatedHistory = [newHistory, ...menuHistory]
+    const updatedHistory = [newHistory, ...historyBase]
     setMenuHistory(updatedHistory)
     saveMenuHistory(updatedHistory)
+  }
+
+  function submitMenuFeedback(feedback) {
+    if (!dailyMenu?.id || !['liked', 'disliked'].includes(feedback)) {
+      return
+    }
+
+    const updatedHistory = markHistoryFeedback(menuHistory, dailyMenu.id, feedback)
+    const updatedDailyMenu = {
+      ...dailyMenu,
+      feedback,
+    }
+
+    setMenuHistory(updatedHistory)
+    setDailyMenu(updatedDailyMenu)
+    saveMenuHistory(updatedHistory)
+
+    if (feedback === 'disliked') {
+      generateMenu(true, dailyMenu.requestText || lastMenuRequest || '', updatedHistory)
+    }
   }
 
   function resetLibrary() {
@@ -326,6 +395,7 @@ export function LunchProvider({ children }) {
     generateMenu,
     removeDish,
     removeDishes,
+    submitMenuFeedback,
     updateDish,
     replaceDishes,
     resetLibrary,

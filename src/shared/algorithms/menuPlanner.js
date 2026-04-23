@@ -2,13 +2,13 @@ import { pickRandomItems } from './menu'
 
 const DEFAULT_TARGET_CALORIES_PER_DISH = 320
 const REQUEST_NUMBER_PATTERN = '(\\d+|[一二两三四五六七八九十]+)'
-const NEGATIVE_PREFIX_PATTERN = '(?:不吃|不要|别|忌口|忌|避开|不想吃|不考虑|不喝|不来|免)'
+const NEGATIVE_PREFIX_PATTERN = '(?:不吃|不要|别|忌口|忌|避开|不想吃|不考虑|不喝|不来|免|别来|不需要)'
 const LIGHT_KEYWORDS = ['少油', '清淡', '低脂', '轻食', '减脂', '清爽']
 const HEAVY_KEYWORDS = ['油炸', '红烧', '干锅', '回锅', '麻辣香锅', '炸', '煎', '辣子']
-const LIGHT_DISH_KEYWORDS = ['清蒸', '白灼', '凉拌', '清炒', '蒸', '水煮']
-const SPICY_KEYWORDS = ['辣', '麻辣', '香辣', '水煮', '川味', '辣子']
+const LIGHT_DISH_KEYWORDS = ['清蒸', '白灼', '凉拌', '清炒', '蒸']
+const SPICY_KEYWORDS = ['辣', '麻辣', '香辣', '川味', '辣子', '剁椒', '水煮', '小炒', '口味']
+const SPICY_SAFE_HINTS = ['不辣', '微辣', '少辣']
 const HEARTY_KEYWORDS = ['下饭', '浓一点', '重点口', '重口', '家常', '喷香', '香一点', '过瘾']
-const VEGETABLE_KEYWORDS = ['素菜', '蔬菜', '青菜']
 
 const HARD_EXCLUSION_RULES = [
   { key: 'noodle', label: '面条', aliases: ['面条', '面', '意面', '拉面', '刀削面', '乌冬', '米线', '河粉', '粉丝'] },
@@ -17,11 +17,12 @@ const HARD_EXCLUSION_RULES = [
   { key: 'pork', label: '猪肉', aliases: ['猪肉', '五花肉', '排骨', '里脊', '猪'] },
   { key: 'chicken', label: '鸡肉', aliases: ['鸡肉', '鸡翅', '鸡腿', '鸡胸', '鸡'] },
   { key: 'duck', label: '鸭肉', aliases: ['鸭肉', '鸭腿', '鸭血', '鸭'] },
-  { key: 'fish', label: '鱼', aliases: ['鱼', '鲈鱼', '鳕鱼', '三文鱼'] },
+  { key: 'fish', label: '鱼', aliases: ['鱼', '鲈鱼', '鲫鱼', '鳕鱼', '三文鱼'] },
   { key: 'shrimp', label: '虾', aliases: ['虾', '大虾', '虾仁'] },
 ]
+
 const PEOPLE_SEGMENT_ALIASES = {
-  adult: ['大人', '成人', '成年人', '男', '男人', '女生', '女性', '女', '女士', '男生', '男性', '老公', '老婆'],
+  adult: ['大人', '成人', '成年人', '男', '男人', '男生', '男性', '女', '女人', '女生', '女性', '女士', '夫妻', '两口子', '老公', '老婆'],
   child: ['小孩', '孩子', '小朋友', '宝宝', '儿童', '娃', '小童'],
   elder: ['老人', '长辈', '爸妈', '父母', '爷爷奶奶', '外公外婆', '老年人'],
 }
@@ -31,16 +32,16 @@ function toSafeCalories(value) {
   return Number.isFinite(calories) && calories > 0 ? calories : DEFAULT_TARGET_CALORIES_PER_DISH
 }
 
+function includesAny(text, words) {
+  return words.some((word) => text.includes(word))
+}
+
 function getCategoryPool(dishes, category) {
   return dishes.filter((dish) => dish.category === category)
 }
 
 function getTemperaturePool(dishes, servingTemperature) {
   return dishes.filter((dish) => dish.servingTemperature === servingTemperature)
-}
-
-function includesAny(text, words) {
-  return words.some((word) => text.includes(word))
 }
 
 function parseChineseNumber(token) {
@@ -134,7 +135,6 @@ function deriveDishCountFromPeople(peopleCount, peopleBreakdown) {
   const effectivePeopleCount = peopleBreakdown
     ? peopleBreakdown.adultCount + peopleBreakdown.elderCount * 0.9 + peopleBreakdown.childCount * 0.6
     : peopleCount
-
   const normalizedPeopleCount = Math.max(1, Math.round(effectivePeopleCount * 10) / 10)
 
   if (normalizedPeopleCount <= 1) {
@@ -166,22 +166,23 @@ function hasNegativeIntent(text, aliases) {
   return expression.test(text)
 }
 
+function hasPositiveIntent(text, aliases) {
+  return aliases.some((alias) => text.includes(alias)) && !hasNegativeIntent(text, aliases)
+}
+
 function normalizeRequestText(text) {
   return String(text || '').trim().replace(/\s+/g, '')
-}
-
-function hasAnyIntent(text, aliases) {
-  return aliases.some((alias) => text.includes(alias))
-}
-
-function hasPositiveIntent(text, aliases) {
-  return hasAnyIntent(text, aliases) && !hasNegativeIntent(text, aliases)
 }
 
 function buildDishSearchText(dish) {
   return [dish.name, dish.category, dish.servingTemperature, ...(dish.tags || [])]
     .filter(Boolean)
     .join(' ')
+}
+
+function isSpicyDish(dish) {
+  const searchableText = buildDishSearchText(dish)
+  return includesAny(searchableText, SPICY_KEYWORDS) && !includesAny(searchableText, SPICY_SAFE_HINTS)
 }
 
 function buildRequestSummary(summaryParts) {
@@ -231,10 +232,10 @@ export function analyzeMenuRequest(text, fallbackMenuCount) {
   const preferLight = includesAny(normalizedText, LIGHT_KEYWORDS)
   const preferHot = /(?:热菜|热乎|热的)/.test(normalizedText)
   const preferCold = /(?:凉菜|冷菜|凉拌|冰镇)/.test(normalizedText)
-  const preferSoup = hasPositiveIntent(normalizedText, ['汤', '喝汤']) && /(?:来点|想喝|要|加一份|带个|配个|加个|最好有|想要|安排).{0,4}(?:汤|喝汤)|喝汤/.test(normalizedText)
-  const avoidSoup =
-    hasNegativeIntent(normalizedText, ['汤']) ||
-    /(?:不要|不想要|不喝|免|别来|不需要).{0,3}汤/.test(normalizedText)
+  const preferSoup =
+    hasPositiveIntent(normalizedText, ['汤', '喝汤']) &&
+    /(?:来点|想喝|要|加一份|带个|配个|加个|最好有|想要|安排).{0,4}(?:汤|喝汤)|喝汤/.test(normalizedText)
+  const avoidSoup = hasNegativeIntent(normalizedText, ['汤']) || /(?:不要|不想要|不喝|免|别来|不需要).{0,3}汤/.test(normalizedText)
   const preferStaple =
     /(?:主食|米饭|馒头|炒饭|盖饭|下饭)/.test(normalizedText) &&
     !hasNegativeIntent(normalizedText, ['主食', '米饭', '馒头', '炒饭', '盖饭'])
@@ -243,28 +244,28 @@ export function analyzeMenuRequest(text, fallbackMenuCount) {
   const preferMoreVegetables =
     /(?:多点|多来点|多一些|多做点|加点).{0,4}(?:素菜|蔬菜|青菜)|(?:素菜|蔬菜|青菜).{0,4}(?:多一点|多一些|为主)/.test(normalizedText)
   const preferHearty = includesAny(normalizedText, HEARTY_KEYWORDS)
-  const avoidSpicy = /(?:不辣|不要辣|少辣|微辣|忌辣|别辣|清淡点|不要麻辣)/.test(normalizedText)
+  const avoidSpicy = /(?:不辣|不要辣|不吃辣|忌辣|不能吃辣|别辣|少辣|微辣|不要麻辣|不吃麻辣|清淡点)/.test(normalizedText)
   const preferSpicy = includesAny(normalizedText, SPICY_KEYWORDS) && !avoidSpicy
 
   const excludedRules = HARD_EXCLUSION_RULES.filter((rule) => hasNegativeIntent(normalizedText, rule.aliases))
 
   if (peopleCount) {
     if (groupedPeople?.adultCount || groupedPeople?.childCount || groupedPeople?.elderCount) {
-      const peopleDetailParts = []
+      const detailParts = []
 
       if (groupedPeople.adultCount) {
-        peopleDetailParts.push(`${groupedPeople.adultCount}位成人`)
+        detailParts.push(`${groupedPeople.adultCount}位成人`)
       }
 
       if (groupedPeople.childCount) {
-        peopleDetailParts.push(`${groupedPeople.childCount}位小孩`)
+        detailParts.push(`${groupedPeople.childCount}位小孩`)
       }
 
       if (groupedPeople.elderCount) {
-        peopleDetailParts.push(`${groupedPeople.elderCount}位老人`)
+        detailParts.push(`${groupedPeople.elderCount}位老人`)
       }
 
-      summaryParts.push(`${peopleCount}人(${peopleDetailParts.join('，')})`)
+      summaryParts.push(`${peopleCount}人(${detailParts.join('，')})`)
     } else {
       summaryParts.push(`${peopleCount}人`)
     }
@@ -292,6 +293,10 @@ export function analyzeMenuRequest(text, fallbackMenuCount) {
     summaryParts.push('带汤')
   }
 
+  if (avoidSoup) {
+    summaryParts.push('不要汤')
+  }
+
   if (preferStaple) {
     summaryParts.push('带主食')
   }
@@ -306,6 +311,10 @@ export function analyzeMenuRequest(text, fallbackMenuCount) {
 
   if (preferHearty) {
     summaryParts.push('偏下饭')
+  }
+
+  if (avoidSpicy) {
+    summaryParts.push('不吃辣')
   }
 
   if (excludedRules.length) {
@@ -339,13 +348,20 @@ export function analyzeMenuRequest(text, fallbackMenuCount) {
   }
 }
 
-function isDishExcluded(dish, analysis) {
+function isDishExcluded(dish, analysis, availableDishes) {
   if (!analysis.hasRequest) {
     return false
   }
 
   if (analysis.preferVegetarian && dish.category === '荤菜') {
     return true
+  }
+
+  if (analysis.avoidSpicy) {
+    const nonSpicyAlternatives = availableDishes.filter((candidate) => !isSpicyDish(candidate))
+    if (nonSpicyAlternatives.length && isSpicyDish(dish)) {
+      return true
+    }
   }
 
   const searchableText = buildDishSearchText(dish)
@@ -393,11 +409,11 @@ function scoreDishAgainstRequest(dish, analysis) {
   }
 
   if (analysis.avoidSoup && dish.category === '汤') {
-    score -= 6
+    score -= 10
   }
 
   if (analysis.avoidStaple && dish.category === '主食') {
-    score -= 6
+    score -= 8
   }
 
   if (analysis.preferVegetarian) {
@@ -431,11 +447,11 @@ function scoreDishAgainstRequest(dish, analysis) {
   }
 
   if (analysis.preferSpicy) {
-    score += includesAny(searchableText, SPICY_KEYWORDS) ? 4 : 0
+    score += isSpicyDish(dish) ? 4 : 0
   }
 
   if (analysis.avoidSpicy) {
-    score += includesAny(searchableText, SPICY_KEYWORDS) ? -6 : 2
+    score += isSpicyDish(dish) ? -20 : 3
   }
 
   return score
@@ -573,9 +589,15 @@ export function generateClassicMenu(dishes, count, options = {}) {
   return selected
 }
 
-function buildRequestedPlan(totalCount, analysis, dishes) {
+function buildScoreMap(dishes, analysis) {
+  return new Map(dishes.map((dish) => [dish.id, scoreDishAgainstRequest(dish, analysis)]))
+}
+
+function buildMainTargets(totalCount, analysis, dishes) {
   const availableMeat = getCategoryPool(dishes, '荤菜').length
   const availableVeg = getCategoryPool(dishes, '素菜').length
+  const availableCold = getTemperaturePool(dishes, '冷菜').length
+  const availableHot = getTemperaturePool(dishes, '热菜').length
   const availableStaple = getCategoryPool(dishes, '主食').length
   const availableSoup = getCategoryPool(dishes, '汤').length
 
@@ -621,58 +643,169 @@ function buildRequestedPlan(totalCount, analysis, dishes) {
 
   if (analysis.preferVegetarian || !availableMeat) {
     vegTarget = mainsCount
-  } else if (analysis.preferMoreVegetables && availableVeg) {
-    vegTarget = Math.ceil(mainsCount * 0.6)
-    meatTarget = mainsCount - vegTarget
-  } else if (analysis.preferHearty && availableMeat) {
-    meatTarget = Math.ceil(mainsCount * 0.6)
-    vegTarget = mainsCount - meatTarget
   } else if (!availableVeg) {
     meatTarget = mainsCount
+  } else if (analysis.preferMoreVegetables) {
+    vegTarget = Math.max(1, Math.ceil(mainsCount * 0.6))
+    meatTarget = Math.max(0, mainsCount - vegTarget)
+  } else if (analysis.preferHearty) {
+    meatTarget = Math.max(1, Math.ceil(mainsCount * 0.6))
+    vegTarget = Math.max(0, mainsCount - meatTarget)
   } else {
     meatTarget = Math.ceil(mainsCount / 2)
     vegTarget = mainsCount - meatTarget
   }
 
+  if (!analysis.preferVegetarian && availableMeat && availableVeg && mainsCount >= 2) {
+    meatTarget = Math.max(meatTarget, 1)
+    vegTarget = Math.max(vegTarget, 1)
+  }
+
   meatTarget = Math.min(meatTarget, availableMeat)
   vegTarget = Math.min(vegTarget, availableVeg)
 
-  const unfilledMains = mainsCount - meatTarget - vegTarget
-
-  if (unfilledMains > 0) {
-    if (availableVeg > vegTarget) {
-      vegTarget += Math.min(unfilledMains, availableVeg - vegTarget)
-    } else if (availableMeat > meatTarget) {
-      meatTarget += Math.min(unfilledMains, availableMeat - meatTarget)
+  while (meatTarget + vegTarget > mainsCount) {
+    if (analysis.preferMoreVegetables && meatTarget > 0) {
+      meatTarget -= 1
+    } else if (vegTarget > 0) {
+      vegTarget -= 1
+    } else if (meatTarget > 0) {
+      meatTarget -= 1
     }
   }
 
+  while (meatTarget + vegTarget < mainsCount) {
+    if (availableVeg > vegTarget && (analysis.preferMoreVegetables || vegTarget <= meatTarget)) {
+      vegTarget += 1
+      continue
+    }
+
+    if (availableMeat > meatTarget) {
+      meatTarget += 1
+      continue
+    }
+
+    if (availableVeg > vegTarget) {
+      vegTarget += 1
+      continue
+    }
+
+    break
+  }
+
+  let hotMin = 0
+  let coldMin = 0
+
+  if (!analysis.preferHot && !analysis.preferCold && availableHot && availableCold && mainsCount >= 2) {
+    hotMin = 1
+    coldMin = 1
+  } else if (analysis.preferHot && availableHot && mainsCount >= 1) {
+    hotMin = 1
+  } else if (analysis.preferCold && availableCold && mainsCount >= 1) {
+    coldMin = 1
+  }
+
+  hotMin = Math.min(hotMin, mainsCount)
+  coldMin = Math.min(coldMin, Math.max(0, mainsCount - hotMin))
+
   return {
-    meatTarget,
-    vegTarget,
+    mainsCount,
+    categoryTargets: {
+      荤菜: meatTarget,
+      素菜: vegTarget,
+    },
+    temperatureMinimums: {
+      热菜: hotMin,
+      冷菜: coldMin,
+    },
     stapleSlots,
     soupSlots,
   }
 }
 
-function buildScoreMap(dishes, analysis) {
-  return new Map(dishes.map((dish) => [dish.id, scoreDishAgainstRequest(dish, analysis)]))
+function countSelectedBy(selected, selector) {
+  return selected.reduce((accumulator, dish) => {
+    const key = selector(dish)
+    accumulator[key] = (accumulator[key] || 0) + 1
+    return accumulator
+  }, {})
 }
 
-function fillFromPool(targetCount, pool, selected, selectedIds, rankedOptions) {
-  while (targetCount > 0) {
+function selectBalancedMains(dishes, plan, rankedOptions) {
+  const mainsPool = dishes.filter((dish) => dish.category !== '主食' && dish.category !== '汤')
+  const selected = []
+  const selectedIds = new Set()
+
+  while (selected.length < plan.mainsCount) {
+    const selectedByCategory = countSelectedBy(selected, (dish) => dish.category)
+    const selectedByTemperature = countSelectedBy(selected, (dish) => dish.servingTemperature)
+    const remainingSlots = plan.mainsCount - selected.length
+    const ranked = sortCandidates(mainsPool, selectedIds, rankedOptions).sort((left, right) => {
+      const leftUtility = getMainDishUtility(left, plan, selectedByCategory, selectedByTemperature, remainingSlots, rankedOptions.scoreMap)
+      const rightUtility = getMainDishUtility(right, plan, selectedByCategory, selectedByTemperature, remainingSlots, rankedOptions.scoreMap)
+      return rightUtility - leftUtility
+    })
+
+    if (!ranked.length) {
+      break
+    }
+
+    appendDish(selected, selectedIds, ranked[0])
+  }
+
+  return { selected, selectedIds }
+}
+
+function getMainDishUtility(dish, plan, selectedByCategory, selectedByTemperature, remainingSlots, scoreMap) {
+  let utility = scoreMap ? scoreMap.get(dish.id) || 0 : 0
+  const unmetCategoryCount = Object.entries(plan.categoryTargets).reduce((total, [category, target]) => {
+    return total + Math.max(0, target - (selectedByCategory[category] || 0))
+  }, 0)
+  const unmetTemperatureCount = Object.entries(plan.temperatureMinimums).reduce((total, [temperature, target]) => {
+    return total + Math.max(0, target - (selectedByTemperature[temperature] || 0))
+  }, 0)
+  const dishCategoryTarget = plan.categoryTargets[dish.category] || 0
+  const dishTemperatureTarget = plan.temperatureMinimums[dish.servingTemperature] || 0
+  const categoryMissing = Math.max(0, dishCategoryTarget - (selectedByCategory[dish.category] || 0))
+  const temperatureMissing = Math.max(0, dishTemperatureTarget - (selectedByTemperature[dish.servingTemperature] || 0))
+
+  if (categoryMissing > 0) {
+    utility += 18
+  } else if (dishCategoryTarget === 0 && unmetCategoryCount > 0) {
+    utility -= 10
+  } else if (unmetCategoryCount > 0) {
+    utility -= 4
+  }
+
+  if (temperatureMissing > 0) {
+    utility += 10
+  } else if (dishTemperatureTarget === 0 && unmetTemperatureCount > 0) {
+    utility -= 5
+  }
+
+  if (remainingSlots <= unmetCategoryCount + unmetTemperatureCount && categoryMissing === 0 && temperatureMissing === 0) {
+    utility -= 16
+  }
+
+  return utility
+}
+
+function fillSupportDishes(targetCount, pool, selected, selectedIds, rankedOptions) {
+  let remaining = targetCount
+
+  while (remaining > 0) {
     const picked = takeOne(pool, selectedIds, rankedOptions)
 
     if (!appendDish(selected, selectedIds, picked)) {
       break
     }
 
-    targetCount -= 1
+    remaining -= 1
   }
 }
 
 function generateRequestedMenu(dishes, count, options, analysis) {
-  const allowedDishes = dishes.filter((dish) => !isDishExcluded(dish, analysis))
+  const allowedDishes = dishes.filter((dish) => !isDishExcluded(dish, analysis, dishes))
 
   if (!allowedDishes.length) {
     return generateClassicMenu(dishes, count, options)
@@ -690,18 +823,15 @@ function generateRequestedMenu(dishes, count, options, analysis) {
   }
 
   const targetTotalCount = Math.max(1, Math.min(analysis.requestedDishCount || count || 1, allowedDishes.length))
-  const plan = buildRequestedPlan(targetTotalCount, analysis, allowedDishes)
+  const plan = buildMainTargets(targetTotalCount, analysis, allowedDishes)
   const rankedOptions = {
     scoreMap,
     targetAverageCalories: Math.max(120, Number(options.targetAverageCalories) || DEFAULT_TARGET_CALORIES_PER_DISH),
   }
-  const selected = []
-  const selectedIds = new Set()
+  const { selected, selectedIds } = selectBalancedMains(allowedDishes, plan, rankedOptions)
 
-  fillFromPool(plan.meatTarget, getCategoryPool(allowedDishes, '荤菜'), selected, selectedIds, rankedOptions)
-  fillFromPool(plan.vegTarget, getCategoryPool(allowedDishes, '素菜'), selected, selectedIds, rankedOptions)
-  fillFromPool(plan.stapleSlots, getCategoryPool(allowedDishes, '主食'), selected, selectedIds, rankedOptions)
-  fillFromPool(plan.soupSlots, getCategoryPool(allowedDishes, '汤'), selected, selectedIds, rankedOptions)
+  fillSupportDishes(plan.stapleSlots, getCategoryPool(allowedDishes, '主食'), selected, selectedIds, rankedOptions)
+  fillSupportDishes(plan.soupSlots, getCategoryPool(allowedDishes, '汤'), selected, selectedIds, rankedOptions)
 
   if (selected.length < targetTotalCount) {
     const fallbackClassic = generateClassicMenu(allowedDishes, Math.max(targetTotalCount - 2, 1), {
