@@ -1,9 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { defaultDishes } from '../data/defaultDishes'
+import { DEFAULT_DISH_LIBRARY_VERSION, defaultDishes, LEGACY_SEED_DISH_IDS } from '../data/defaultDishes'
 import { normalizeHistoricalDish } from '../shared/algorithms/dishProfile'
 import { normalizeTags, todayKey } from '../shared/algorithms/menu'
 import { analyzeMenuRequest, generateBalancedMenu } from '../shared/algorithms/menuPlanner'
 import {
+  saveDishLibraryVersion,
   loadLunchState,
   loadMenuHistory,
   saveDailyMenu,
@@ -14,6 +15,18 @@ import {
 } from '../shared/storage/lunchDb'
 
 const LunchContext = createContext(null)
+
+function shouldUpgradeSeedLibrary(storedDishes, storedVersion) {
+  if (!Array.isArray(storedDishes) || storedVersion >= DEFAULT_DISH_LIBRARY_VERSION) {
+    return false
+  }
+
+  if (storedDishes.length !== LEGACY_SEED_DISH_IDS.length) {
+    return false
+  }
+
+  return storedDishes.every((dish, index) => dish?.id === LEGACY_SEED_DISH_IDS[index])
+}
 
 function buildDailyMenuPayload(dishes, menuCount, requestText) {
   const requestAnalysis = analyzeMenuRequest(requestText, menuCount)
@@ -35,6 +48,7 @@ export function LunchProvider({ children }) {
   const [dishes, setDishes] = useState(defaultDishes)
   const [menuCount, setMenuCount] = useState(3)
   const [menuRequest, setMenuRequest] = useState('')
+  const [dishLibraryVersion, setDishLibraryVersion] = useState(DEFAULT_DISH_LIBRARY_VERSION)
   const [dailyMenu, setDailyMenu] = useState(() => buildDailyMenuPayload(defaultDishes, 3, ''))
   const [menuHistory, setMenuHistory] = useState([])
   const [isReady, setIsReady] = useState(false)
@@ -48,13 +62,23 @@ export function LunchProvider({ children }) {
         dailyMenu: buildDailyMenuPayload(defaultDishes, 3, ''),
         menuCount: 3,
         menuRequest: '',
+        dishLibraryVersion: DEFAULT_DISH_LIBRARY_VERSION,
       }
 
       try {
         const storedState = await loadLunchState(fallbackState)
-        const nextDishes = (storedState.dishes.length ? storedState.dishes : defaultDishes).map(normalizeHistoricalDish)
+        const shouldUpgrade = shouldUpgradeSeedLibrary(storedState.dishes, storedState.dishLibraryVersion)
+        const sourceDishes = shouldUpgrade
+          ? defaultDishes
+          : storedState.dishes.length
+            ? storedState.dishes
+            : defaultDishes
+        const nextDishes = sourceDishes.map(normalizeHistoricalDish)
         const nextMenuCount = storedState.menuCount || 3
         const nextMenuRequest = storedState.menuRequest || ''
+        const nextDishLibraryVersion = shouldUpgrade
+          ? DEFAULT_DISH_LIBRARY_VERSION
+          : storedState.dishLibraryVersion || DEFAULT_DISH_LIBRARY_VERSION
         let nextDailyMenu = {
           ...storedState.dailyMenu,
           items: (storedState.dailyMenu.items || []).map(normalizeHistoricalDish),
@@ -69,6 +93,7 @@ export function LunchProvider({ children }) {
 
         if (!cancelled) {
           setDishes(nextDishes)
+          setDishLibraryVersion(nextDishLibraryVersion)
           setMenuCount(nextMenuCount)
           setMenuRequest(nextMenuRequest)
           setDailyMenu(nextDailyMenu)
@@ -96,6 +121,14 @@ export function LunchProvider({ children }) {
 
     saveDishes(dishes)
   }, [dishes, isReady])
+
+  useEffect(() => {
+    if (!isReady) {
+      return
+    }
+
+    saveDishLibraryVersion(dishLibraryVersion)
+  }, [dishLibraryVersion, isReady])
 
   useEffect(() => {
     if (!isReady) {
@@ -166,11 +199,59 @@ export function LunchProvider({ children }) {
     setDishes((current) => [nextDish, ...current])
   }
 
+  function updateDish(id, values) {
+    const nextTags = Array.isArray(values.tags) ? values.tags : normalizeTags(values.tags || '')
+
+    setDishes((current) =>
+      current.map((dish) =>
+        dish.id === id
+          ? {
+              ...dish,
+              name: values.name.trim(),
+              calories: Number(values.calories) || dish.calories || 300,
+              category: values.category.trim() || '未分类',
+              servingTemperature: values.servingTemperature || '热菜',
+              tags: nextTags,
+            }
+          : dish,
+      ),
+    )
+    setDailyMenu((current) => ({
+      ...current,
+      items: current.items.map((dish) =>
+        dish.id === id
+          ? {
+              ...dish,
+              name: values.name.trim(),
+              calories: Number(values.calories) || dish.calories || 300,
+              category: values.category.trim() || '未分类',
+              servingTemperature: values.servingTemperature || '热菜',
+              tags: nextTags,
+            }
+          : dish,
+      ),
+    }))
+  }
+
   function removeDish(id) {
     setDishes((current) => current.filter((dish) => dish.id !== id))
     setDailyMenu((current) => ({
       ...current,
       items: current.items.filter((dish) => dish.id !== id),
+    }))
+  }
+
+  function removeDishes(ids) {
+    const targetIds = new Set(ids)
+
+    if (!targetIds.size) {
+      return
+    }
+
+    setDishes((current) => current.filter((dish) => !targetIds.has(dish.id)))
+    setDailyMenu((current) => ({
+      ...current,
+      items: current.items.filter((dish) => !targetIds.has(dish.id)),
     }))
   }
 
@@ -203,6 +284,7 @@ export function LunchProvider({ children }) {
 
   function resetLibrary() {
     setDishes(defaultDishes)
+    setDishLibraryVersion(DEFAULT_DISH_LIBRARY_VERSION)
     setDailyMenu(buildDailyMenuPayload(defaultDishes, menuCount, menuRequest))
   }
 
@@ -210,6 +292,7 @@ export function LunchProvider({ children }) {
     const normalizedDishes = nextDishes.map(normalizeHistoricalDish)
 
     setDishes(normalizedDishes)
+    setDishLibraryVersion(DEFAULT_DISH_LIBRARY_VERSION)
     setDailyMenu(buildDailyMenuPayload(normalizedDishes, menuCount, menuRequest))
   }
 
@@ -226,6 +309,8 @@ export function LunchProvider({ children }) {
     addDish,
     generateMenu,
     removeDish,
+    removeDishes,
+    updateDish,
     replaceDishes,
     resetLibrary,
     setMenuCount,

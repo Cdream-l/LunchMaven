@@ -1,6 +1,7 @@
 import {
   DeleteOutlined,
   DownloadOutlined,
+  EditOutlined,
   PlusOutlined,
   ReloadOutlined,
   ThunderboltOutlined,
@@ -13,6 +14,7 @@ import {
   Form,
   Input,
   InputNumber,
+  Modal,
   Popconfirm,
   Row,
   Select,
@@ -40,12 +42,15 @@ function getCaloriesLevelMeta(calories) {
 }
 
 export default function LibraryPage() {
-  const { addDish, categories, dishes, removeDish, replaceDishes, resetLibrary } = useLunch()
+  const { addDish, categories, dishes, removeDish, removeDishes, replaceDishes, resetLibrary, updateDish } = useLunch()
   const [draftName, setDraftName] = useState('')
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState('全部')
+  const [selectedRowKeys, setSelectedRowKeys] = useState([])
   const [suggestionReady, setSuggestionReady] = useState(false)
+  const [editingDish, setEditingDish] = useState(null)
   const [detailForm] = Form.useForm()
+  const [editForm] = Form.useForm()
   const [messageApi, contextHolder] = message.useMessage()
   const importInputRef = useRef(null)
 
@@ -66,6 +71,16 @@ export default function LibraryPage() {
     })
   }, [activeCategory, dishes, search])
 
+  const filteredDishIds = useMemo(() => filteredDishes.map((dish) => dish.id), [filteredDishes])
+  const selectedCount = selectedRowKeys.length
+  const hasFilteredRows = filteredDishIds.length > 0
+
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: setSelectedRowKeys,
+    preserveSelectedRowKeys: false,
+  }
+
   const columns = [
     {
       title: '菜品',
@@ -75,7 +90,7 @@ export default function LibraryPage() {
         <Space direction="vertical" size={2}>
           <Typography.Text strong>{record.name}</Typography.Text>
           <Typography.Text type="secondary">
-            {record.category} · {record.servingTemperature}
+            {record.category} / {record.servingTemperature}
           </Typography.Text>
         </Space>
       ),
@@ -87,7 +102,7 @@ export default function LibraryPage() {
       width: 130,
       render: (value) => {
         const caloriesMeta = getCaloriesLevelMeta(value)
-        return <Tag color={caloriesMeta.color}>{value} kcal · {caloriesMeta.label}</Tag>
+        return <Tag color={caloriesMeta.color}>{value} kcal / {caloriesMeta.label}</Tag>
       },
     },
     {
@@ -105,15 +120,18 @@ export default function LibraryPage() {
       key: 'actions',
       width: 120,
       render: (_, record) => (
-        <Popconfirm
-          title="删除菜品"
-          description={`确定删除“${record.name}”吗？`}
-          okText="删除"
-          cancelText="取消"
-          onConfirm={() => removeDish(record.id)}
-        >
-          <Button danger icon={<DeleteOutlined />} />
-        </Popconfirm>
+        <Space>
+          <Button icon={<EditOutlined />} onClick={() => handleStartEdit(record)} />
+          <Popconfirm
+            title="删除菜品"
+            description={`确定删除“${record.name}”吗？`}
+            okText="删除"
+            cancelText="取消"
+            onConfirm={() => removeDish(record.id)}
+          >
+            <Button danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </Space>
       ),
     },
   ]
@@ -136,7 +154,7 @@ export default function LibraryPage() {
       tags: suggestion.tags,
     })
     setSuggestionReady(true)
-    messageApi.success('已根据菜名预填其它信息')
+    messageApi.success('已根据菜名预填其他信息')
   }
 
   function handleFinish(values) {
@@ -176,11 +194,65 @@ export default function LibraryPage() {
       const importedDishes = parseDishesMarkdown(content)
 
       replaceDishes(importedDishes)
+      setSelectedRowKeys([])
       messageApi.success(`已导入 ${importedDishes.length} 道菜`)
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : '导入失败，请检查 Markdown 格式')
     } finally {
       event.target.value = ''
+    }
+  }
+
+  function handleBatchDelete() {
+    if (!selectedCount) {
+      return
+    }
+
+    removeDishes(selectedRowKeys)
+    setSelectedRowKeys([])
+    messageApi.success(`已删除 ${selectedCount} 道菜`)
+  }
+
+  function handleDeleteFiltered() {
+    if (!hasFilteredRows) {
+      return
+    }
+
+    removeDishes(filteredDishIds)
+    setSelectedRowKeys([])
+    messageApi.success(`已删除当前筛选结果中的 ${filteredDishIds.length} 道菜`)
+  }
+
+  function handleResetLibrary() {
+    resetLibrary()
+    setSelectedRowKeys([])
+  }
+
+  function handleStartEdit(dish) {
+    setEditingDish(dish)
+    editForm.setFieldsValue({
+      name: dish.name,
+      category: dish.category,
+      servingTemperature: dish.servingTemperature,
+      calories: dish.calories,
+      tags: dish.tags,
+    })
+  }
+
+  function handleCancelEdit() {
+    setEditingDish(null)
+    editForm.resetFields()
+  }
+
+  async function handleSaveEdit() {
+    try {
+      const values = await editForm.validateFields()
+      updateDish(editingDish.id, values)
+      setEditingDish(null)
+      editForm.resetFields()
+      messageApi.success('菜品已更新')
+    } catch {
+      return
     }
   }
 
@@ -218,15 +290,39 @@ export default function LibraryPage() {
                 onChange={setActiveCategory}
                 style={{ width: 140 }}
               />
+              <Popconfirm
+                title="删除当前筛选结果"
+                description={`确定删除当前筛选结果中的 ${filteredDishIds.length} 道菜吗？`}
+                okText="删除"
+                cancelText="取消"
+                onConfirm={handleDeleteFiltered}
+                disabled={!hasFilteredRows}
+              >
+                <Button danger disabled={!hasFilteredRows}>
+                  删除当前筛选
+                </Button>
+              </Popconfirm>
               <Button icon={<DownloadOutlined />} onClick={handleExportMarkdown}>
                 导出 Markdown
               </Button>
               <Button icon={<UploadOutlined />} onClick={triggerImport}>
                 导入 Markdown
               </Button>
-              <Button icon={<ReloadOutlined />} onClick={resetLibrary}>
+              <Button icon={<ReloadOutlined />} onClick={handleResetLibrary}>
                 恢复示例
               </Button>
+              <Popconfirm
+                title="批量删除菜品"
+                description={`确定删除已选中的 ${selectedCount} 道菜吗？`}
+                okText="删除"
+                cancelText="取消"
+                onConfirm={handleBatchDelete}
+                disabled={!selectedCount}
+              >
+                <Button danger icon={<DeleteOutlined />} disabled={!selectedCount}>
+                  批量删除{selectedCount ? ` (${selectedCount})` : ''}
+                </Button>
+              </Popconfirm>
             </Space>
           </Col>
         </Row>
@@ -243,7 +339,7 @@ export default function LibraryPage() {
                 onPressEnter={handlePrefill}
               />
               <Button type="primary" icon={<ThunderboltOutlined />} onClick={handlePrefill} block>
-                智能预填其它信息
+                智能预填其他信息
               </Button>
 
               <Form layout="vertical" form={detailForm} onFinish={handleFinish}>
@@ -299,6 +395,7 @@ export default function LibraryPage() {
           <Card title={`共 ${filteredDishes.length} 道菜`}>
             <Table
               rowKey="id"
+              rowSelection={rowSelection}
               columns={columns}
               dataSource={filteredDishes}
               pagination={{ pageSize: 6, showSizeChanger: false }}
@@ -307,6 +404,54 @@ export default function LibraryPage() {
           </Card>
         </Col>
       </Row>
+
+      <Modal
+        title={editingDish ? `编辑菜品：${editingDish.name}` : '编辑菜品'}
+        open={Boolean(editingDish)}
+        onCancel={handleCancelEdit}
+        onOk={handleSaveEdit}
+        okText="保存"
+        cancelText="取消"
+        destroyOnClose
+      >
+        <Form layout="vertical" form={editForm}>
+          <Form.Item
+            label="菜品名称"
+            name="name"
+            rules={[{ required: true, message: '请输入菜品名称' }]}
+          >
+            <Input placeholder="菜品名称" />
+          </Form.Item>
+          <Form.Item
+            label="分类"
+            name="category"
+            rules={[{ required: true, message: '请选择分类' }]}
+          >
+            <Select options={CATEGORY_OPTIONS.map((item) => ({ value: item, label: item }))} />
+          </Form.Item>
+          <Form.Item
+            label="食用温度"
+            name="servingTemperature"
+            rules={[{ required: true, message: '请选择食用温度' }]}
+          >
+            <Select options={TEMPERATURE_OPTIONS.map((item) => ({ value: item, label: item }))} />
+          </Form.Item>
+          <Form.Item
+            label="热量"
+            name="calories"
+            rules={[{ required: true, message: '请输入热量' }]}
+          >
+            <InputNumber min={1} max={1000} precision={0} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item label="标签" name="tags">
+            <Select
+              mode="tags"
+              tokenSeparators={[',', '，']}
+              placeholder="可继续补充或删除标签"
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
     </Space>
   )
 }
