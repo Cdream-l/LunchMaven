@@ -162,9 +162,6 @@ export default function GeneratorPage() {
               </Typography.Text>
             </div>
             <Space wrap>
-              <Tag color={dailyMenu.feedback === 'liked' ? 'success' : dailyMenu.feedback === 'disliked' ? 'error' : 'processing'}>
-                {dailyMenu.feedback === 'liked' ? '已满意' : dailyMenu.feedback === 'disliked' ? '已不满意' : '待点评'}
-              </Tag>
               <Button
                 type={dailyMenu.feedback === 'liked' ? 'primary' : 'default'}
                 onClick={() => submitMenuFeedback('liked')}
@@ -174,6 +171,13 @@ export default function GeneratorPage() {
               <Button danger onClick={() => submitMenuFeedback('disliked')}>
                 不满意，换一组
               </Button>
+              {dailyMenu.feedback === 'liked' ? (
+                <Tag color="success">满意</Tag>
+              ) : dailyMenu.feedback === 'disliked' ? (
+                <Tag color="orange">不满意</Tag>
+              ) : (
+                <Tag color="processing">待点评</Tag>
+              )}
             </Space>
           </div>
         ) : null}
@@ -289,14 +293,24 @@ export default function GeneratorPage() {
                   <div className="history-item">
                     <div className="history-header">
                       <Typography.Text strong>
-                        第 {menuHistory.length - index} 次生成 - {history.date}
+                        {history.feedback === 'disliked' ? (
+                          <>
+                            <span style={{ textDecoration: 'line-through' }}>第 {menuHistory.length - index} 次生成</span> - {history.date}
+                            <Tag color="orange" style={{ marginLeft: 8 }}>不满意</Tag>
+                          </>
+                        ) : (
+                          <>
+                            第 {menuHistory.length - index} 次生成 - {history.date}
+                            {history.feedback === 'liked' ? (
+                              <Tag color="success" style={{ marginLeft: 8 }}>满意</Tag>
+                            ) : null}
+                          </>
+                        )}
                       </Typography.Text>
                       <Space wrap size={6}>
                         <Tag color="blue">
                           {history.requestMeta?.requestedDishCount || history.menuCount || history.items.length} 道菜
                         </Tag>
-                        {history.feedback === 'liked' ? <Tag color="success">满意</Tag> : null}
-                        {history.feedback === 'disliked' ? <Tag color="error">不满意</Tag> : null}
                       </Space>
                     </div>
                     {history.requestMeta?.summary ? (
