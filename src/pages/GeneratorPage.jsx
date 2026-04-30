@@ -187,6 +187,15 @@ export default function GeneratorPage() {
           />
         ) : null}
 
+        {dailyMenu.requestMeta?.uniquenessNotice ? (
+          <Alert
+            type="warning"
+            showIcon
+            className="menu-request-result"
+            message={dailyMenu.requestMeta.uniquenessNotice}
+          />
+        ) : null}
+
         {dailyMenu.items.length ? (
           <div className="menu-layout-container">
             <Row gutter={[16, 0]} className="menu-categories-row">

@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { DEFAULT_DISH_LIBRARY_VERSION, defaultDishes, LEGACY_SEED_DISH_IDS } from '../data/defaultDishes'
 import { normalizeHistoricalDish } from '../shared/algorithms/dishProfile'
 import { normalizeTags, todayKey } from '../shared/algorithms/menu'
-import { analyzeMenuRequest, generateBalancedMenu } from '../shared/algorithms/menuPlanner'
+import { analyzeMenuRequest, generateBalancedMenuResult } from '../shared/algorithms/menuPlanner'
 import {
   saveDishLibraryVersion,
   loadLunchState,
@@ -17,7 +17,6 @@ import {
 
 const LunchContext = createContext(null)
 const RECENT_DUPLICATE_WINDOW = 10
-const MAX_UNIQUE_GENERATION_ATTEMPTS = 40
 
 function shouldUpgradeSeedLibrary(storedDishes, storedVersion) {
   if (!Array.isArray(storedDishes) || storedVersion >= DEFAULT_DISH_LIBRARY_VERSION) {
@@ -31,13 +30,24 @@ function shouldUpgradeSeedLibrary(storedDishes, storedVersion) {
   return storedDishes.every((dish, index) => dish?.id === LEGACY_SEED_DISH_IDS[index])
 }
 
-function buildDailyMenuPayload(dishes, menuCount, requestText) {
+function buildRecentMenuDishIdGroups(history, windowSize = RECENT_DUPLICATE_WINDOW) {
+  return history
+    .slice(0, windowSize)
+    .map((entry) => (entry.items || []).map((dish) => dish.id).filter(Boolean))
+    .filter((dishIds) => dishIds.length)
+}
+
+function buildDailyMenuPayload(dishes, menuCount, requestText, recentHistory = []) {
   const requestAnalysis = analyzeMenuRequest(requestText, menuCount)
+  const generationResult = generateBalancedMenuResult(dishes, menuCount, {
+    requestText,
+    recentMenuDishIdGroups: buildRecentMenuDishIdGroups(recentHistory),
+  })
 
   return {
     id: crypto.randomUUID(),
     date: todayKey(),
-    items: generateBalancedMenu(dishes, menuCount, { requestText }),
+    items: generationResult.items,
     feedback: null,
     requestText,
     requestMeta: {
@@ -45,6 +55,8 @@ function buildDailyMenuPayload(dishes, menuCount, requestText) {
       requestedDishCount: requestAnalysis.requestedDishCount,
       summary: requestAnalysis.summary,
       selectorEnabled: requestAnalysis.selectorEnabled,
+      uniqueness: generationResult.uniqueness,
+      uniquenessNotice: generationResult.uniqueness?.notice || '',
     },
   }
 }
@@ -113,7 +125,7 @@ export function LunchProvider({ children }) {
         }))
 
         if (nextDailyMenu.date !== todayKey()) {
-          nextDailyMenu = buildDailyMenuPayload(nextDishes, nextMenuCount, nextMenuRequest)
+          nextDailyMenu = buildDailyMenuPayload(nextDishes, nextMenuCount, nextMenuRequest, nextMenuHistory)
         }
 
         if (!cancelled) {
@@ -162,14 +174,14 @@ export function LunchProvider({ children }) {
     }
 
     if (dailyMenu.date !== todayKey()) {
-      setDailyMenu(buildDailyMenuPayload(dishes, menuCount, menuRequest))
+      setDailyMenu(buildDailyMenuPayload(dishes, menuCount, menuRequest, menuHistory))
       return
     }
 
     if (!dailyMenu.items.length && dishes.length) {
-      setDailyMenu(buildDailyMenuPayload(dishes, menuCount, menuRequest))
+      setDailyMenu(buildDailyMenuPayload(dishes, menuCount, menuRequest, menuHistory))
     }
-  }, [dailyMenu.date, dailyMenu.items.length, dishes, isReady, menuCount, menuRequest])
+  }, [dailyMenu.date, dailyMenu.items.length, dishes, isReady, menuCount, menuHistory, menuRequest])
 
   useEffect(() => {
     if (!isReady) {
@@ -220,29 +232,32 @@ export function LunchProvider({ children }) {
   const requestAnalysis = useMemo(() => analyzeMenuRequest(menuRequest, menuCount), [menuCount, menuRequest])
 
   function createUniqueMenu(nextRequestText, recentHistory = menuHistory) {
-    const recentSignatures = new Set(
-      recentHistory
-        .slice(0, RECENT_DUPLICATE_WINDOW)
-        .map((history) => buildMenuSignature(history.items || []))
-        .filter(Boolean),
-    )
+    return buildDailyMenuPayload(dishes, menuCount, nextRequestText, recentHistory)
+  }
 
-    let fallbackMenu = null
+  function buildGenerationHistory(historyBase) {
+    const currentSignature = buildMenuSignature(dailyMenu.items || [])
 
-    for (let attempt = 0; attempt < MAX_UNIQUE_GENERATION_ATTEMPTS; attempt += 1) {
-      const candidate = buildDailyMenuPayload(dishes, menuCount, nextRequestText)
-      const signature = buildMenuSignature(candidate.items)
-
-      if (!fallbackMenu) {
-        fallbackMenu = candidate
-      }
-
-      if (!recentSignatures.has(signature)) {
-        return candidate
-      }
+    if (!currentSignature) {
+      return historyBase
     }
 
-    return fallbackMenu || buildDailyMenuPayload(dishes, menuCount, nextRequestText)
+    const alreadyTracked = historyBase.some((entry) => {
+      return entry.id === dailyMenu.id || buildMenuSignature(entry.items || []) === currentSignature
+    })
+
+    if (alreadyTracked) {
+      return historyBase
+    }
+
+    return [
+      {
+        id: dailyMenu.id,
+        date: dailyMenu.date,
+        items: dailyMenu.items,
+      },
+      ...historyBase,
+    ]
   }
 
   function addDish(values) {
@@ -326,7 +341,8 @@ export function LunchProvider({ children }) {
     }
 
     const nextRequestText = typeof overrideRequestText === 'string' ? overrideRequestText : menuRequest
-    const newMenu = createUniqueMenu(nextRequestText, historyBase)
+    const uniquenessHistory = buildGenerationHistory(historyBase)
+    const newMenu = createUniqueMenu(nextRequestText, uniquenessHistory)
     setDailyMenu(newMenu)
     setLastMenuRequest(nextRequestText.trim())
     setMenuRequest('')
@@ -369,7 +385,7 @@ export function LunchProvider({ children }) {
   function resetLibrary() {
     setDishes(defaultDishes)
     setDishLibraryVersion(DEFAULT_DISH_LIBRARY_VERSION)
-    setDailyMenu(buildDailyMenuPayload(defaultDishes, menuCount, menuRequest))
+    setDailyMenu(buildDailyMenuPayload(defaultDishes, menuCount, menuRequest, menuHistory))
   }
 
   function replaceDishes(nextDishes) {
@@ -377,7 +393,7 @@ export function LunchProvider({ children }) {
 
     setDishes(normalizedDishes)
     setDishLibraryVersion(DEFAULT_DISH_LIBRARY_VERSION)
-    setDailyMenu(buildDailyMenuPayload(normalizedDishes, menuCount, menuRequest))
+    setDailyMenu(buildDailyMenuPayload(normalizedDishes, menuCount, menuRequest, menuHistory))
   }
 
   const value = {

@@ -1,6 +1,17 @@
 import { pickRandomItems } from './menu'
 
 const DEFAULT_TARGET_CALORIES_PER_DISH = 320
+const STRICT_UNIQUE_WINDOW = 10
+const RELAXED_UNIQUE_WINDOW = 3
+const MAX_UNIQUENESS_SEARCH_VISITS = 20000
+const DISH_RELAXED_WINDOW_NOTICE = '可用菜品数量不足，已放宽为最近 3 次内每道菜不重复。'
+const DISH_RELAXED_FILTER_NOTICE =
+  '为避免最近 3 次菜品重复，已放宽部分筛选条件补足菜品；如果出现不完全符合描述的菜品，这是因为当前菜库可选菜品不足。'
+const DISH_EXHAUSTED_UNIQUENESS_NOTICE = '当前菜库和筛选条件下菜品过少，暂时无法保证最近 3 次内每道菜都不重复。'
+const RELAXED_WINDOW_NOTICE = '可用菜品组合不足，已放宽为最近 3 次内不重复。'
+const RELAXED_FILTER_NOTICE =
+  '为避免最近 3 次菜单重复，已放宽部分筛选条件补足组合；如果出现不完全符合描述的菜品，这是因为当前菜库可选组合不足。'
+const EXHAUSTED_UNIQUENESS_NOTICE = '当前菜库和筛选条件下组合过少，暂时无法保证最近 3 次内不重复。'
 const REQUEST_NUMBER_PATTERN = '(\\d+|[一二两三四五六七八九十]+)'
 const NEGATIVE_PREFIX_PATTERN = '(?:不吃|不要|别|忌口|忌|避开|不想吃|不考虑|不喝|不来|免|别来|不需要)'
 const LIGHT_KEYWORDS = ['少油', '清淡', '低脂', '轻食', '减脂', '清爽']
@@ -860,16 +871,254 @@ function generateRequestedMenu(dishes, count, options, analysis) {
   return selected.slice(0, targetTotalCount)
 }
 
-export function generateBalancedMenu(dishes, count, options = {}) {
+function generateBalancedMenuItems(dishes, count, options = {}, analysis = analyzeMenuRequest(options.requestText, count)) {
   if (!Array.isArray(dishes) || !dishes.length) {
     return []
   }
-
-  const analysis = analyzeMenuRequest(options.requestText, count)
 
   if (!analysis.hasRequest) {
     return generateClassicMenu(dishes, count, options)
   }
 
   return generateRequestedMenu(dishes, count, options, analysis)
+}
+
+function buildMenuSignature(items) {
+  return [...items]
+    .map((dish) => dish.id)
+    .sort()
+    .join('|')
+}
+
+function buildBlockedDishIdSet(dishIdGroups, windowSize) {
+  if (!Array.isArray(dishIdGroups) || !dishIdGroups.length) {
+    return new Set()
+  }
+
+  return new Set(dishIdGroups.slice(0, windowSize).flat().filter(Boolean))
+}
+
+function hasBlockedDish(items, blockedDishIds) {
+  return items.some((dish) => blockedDishIds.has(dish.id))
+}
+
+function buildUniquenessMeta(status, windowSize, notice = '', relaxedFilters = false) {
+  return {
+    status,
+    windowSize,
+    relaxedFilters,
+    notice,
+  }
+}
+
+function buildRankedOptions(options, scoreMap) {
+  return {
+    scoreMap,
+    targetAverageCalories: Math.max(120, Number(options.targetAverageCalories) || DEFAULT_TARGET_CALORIES_PER_DISH),
+  }
+}
+
+function getReplacementTier(originalDish, candidate, allowLooseStructure) {
+  const sameCategory = candidate.category === originalDish.category
+  const sameTemperature = candidate.servingTemperature === originalDish.servingTemperature
+
+  if (sameCategory && sameTemperature) {
+    return 0
+  }
+
+  if (sameCategory) {
+    return 1
+  }
+
+  if (allowLooseStructure && sameTemperature) {
+    return 2
+  }
+
+  return allowLooseStructure ? 3 : null
+}
+
+function getSlotCandidates(baseItems, targetIndex, pool, blockedDishIds, rankedOptions, allowLooseStructure) {
+  const originalDish = baseItems[targetIndex]
+  const lockedIds = new Set(baseItems.map((dish) => dish.id))
+  lockedIds.delete(originalDish.id)
+
+  const replacements = pool
+    .filter((candidate) => candidate.id !== originalDish.id && !lockedIds.has(candidate.id) && !blockedDishIds.has(candidate.id))
+    .map((candidate) => ({
+      dish: candidate,
+      tier: getReplacementTier(originalDish, candidate, allowLooseStructure),
+    }))
+    .filter((candidate) => candidate.tier !== null)
+    .sort((left, right) => {
+      if (left.tier !== right.tier) {
+        return left.tier - right.tier
+      }
+
+      const leftScore = rankedOptions.scoreMap?.get(left.dish.id) || 0
+      const rightScore = rankedOptions.scoreMap?.get(right.dish.id) || 0
+
+      if (leftScore !== rightScore) {
+        return rightScore - leftScore
+      }
+
+      const leftGap = Math.abs(toSafeCalories(left.dish.calories) - toSafeCalories(originalDish.calories))
+      const rightGap = Math.abs(toSafeCalories(right.dish.calories) - toSafeCalories(originalDish.calories))
+
+      if (leftGap !== rightGap) {
+        return leftGap - rightGap
+      }
+
+      return left.dish.name.localeCompare(right.dish.name, 'zh-CN')
+    })
+    .map((candidate) => candidate.dish)
+
+  return blockedDishIds.has(originalDish.id) ? replacements : [originalDish, ...replacements]
+}
+
+function findUniqueMenuVariant(baseItems, pool, blockedDishIds, rankedOptions, allowLooseStructure = false) {
+  if (!baseItems.length || pool.length < baseItems.length) {
+    return null
+  }
+
+  const slotCandidates = baseItems.map((_, index) =>
+    getSlotCandidates(baseItems, index, pool, blockedDishIds, rankedOptions, allowLooseStructure),
+  )
+
+  if (slotCandidates.some((candidates) => !candidates.length)) {
+    return null
+  }
+
+  const selected = []
+  const selectedIds = new Set()
+  let visited = 0
+
+  function visitSlot(index) {
+    if (visited >= MAX_UNIQUENESS_SEARCH_VISITS) {
+      return null
+    }
+
+    if (index >= slotCandidates.length) {
+      visited += 1
+      return hasBlockedDish(selected, blockedDishIds) ? null : [...selected]
+    }
+
+    for (const dish of slotCandidates[index]) {
+      if (selectedIds.has(dish.id) || blockedDishIds.has(dish.id)) {
+        continue
+      }
+
+      selected.push(dish)
+      selectedIds.add(dish.id)
+
+      const result = visitSlot(index + 1)
+
+      if (result) {
+        return result
+      }
+
+      selected.pop()
+      selectedIds.delete(dish.id)
+    }
+
+    return null
+  }
+
+  return visitSlot(0)
+}
+
+function getStrictCandidatePool(dishes, analysis) {
+  if (!analysis.hasRequest) {
+    return dishes
+  }
+
+  return dishes.filter((dish) => !isDishExcluded(dish, analysis, dishes))
+}
+
+function enforceMenuUniqueness(dishes, count, options, analysis, baseItems) {
+  const strictBlockedDishIds = buildBlockedDishIdSet(options.recentMenuDishIdGroups, STRICT_UNIQUE_WINDOW)
+  const relaxedBlockedDishIds = buildBlockedDishIdSet(options.recentMenuDishIdGroups, RELAXED_UNIQUE_WINDOW)
+
+  if (!strictBlockedDishIds.size || !hasBlockedDish(baseItems, strictBlockedDishIds)) {
+    return {
+      items: baseItems,
+      uniqueness: buildUniquenessMeta('strict', STRICT_UNIQUE_WINDOW),
+    }
+  }
+
+  const strictPool = getStrictCandidatePool(dishes, analysis)
+  const effectiveStrictPool = strictPool.length ? strictPool : dishes
+  const strictScoreMap = analysis.hasRequest ? buildScoreMap(effectiveStrictPool, analysis) : null
+  const strictVariant = findUniqueMenuVariant(
+    baseItems,
+    effectiveStrictPool,
+    strictBlockedDishIds,
+    buildRankedOptions(options, strictScoreMap),
+  )
+
+  if (strictVariant) {
+    return {
+      items: strictVariant,
+      uniqueness: buildUniquenessMeta('strict-adjusted', STRICT_UNIQUE_WINDOW),
+    }
+  }
+
+  if (!hasBlockedDish(baseItems, relaxedBlockedDishIds)) {
+    return {
+      items: baseItems,
+      uniqueness: buildUniquenessMeta('relaxed-window', RELAXED_UNIQUE_WINDOW, DISH_RELAXED_WINDOW_NOTICE),
+    }
+  }
+
+  const relaxedWindowVariant = findUniqueMenuVariant(
+    baseItems,
+    effectiveStrictPool,
+    relaxedBlockedDishIds,
+    buildRankedOptions(options, strictScoreMap),
+  )
+
+  if (relaxedWindowVariant) {
+    return {
+      items: relaxedWindowVariant,
+      uniqueness: buildUniquenessMeta('relaxed-window', RELAXED_UNIQUE_WINDOW, DISH_RELAXED_WINDOW_NOTICE),
+    }
+  }
+
+  const relaxedFilterScoreMap = analysis.hasRequest ? buildScoreMap(dishes, analysis) : null
+  const relaxedFilterVariant = findUniqueMenuVariant(
+    baseItems,
+    dishes,
+    relaxedBlockedDishIds,
+    buildRankedOptions(options, relaxedFilterScoreMap),
+    true,
+  )
+
+  if (relaxedFilterVariant) {
+    return {
+      items: relaxedFilterVariant,
+      uniqueness: buildUniquenessMeta('relaxed-filters', RELAXED_UNIQUE_WINDOW, DISH_RELAXED_FILTER_NOTICE, true),
+    }
+  }
+
+  return {
+    items: baseItems,
+    uniqueness: buildUniquenessMeta('exhausted', RELAXED_UNIQUE_WINDOW, DISH_EXHAUSTED_UNIQUENESS_NOTICE, true),
+  }
+}
+
+export function generateBalancedMenuResult(dishes, count, options = {}) {
+  if (!Array.isArray(dishes) || !dishes.length) {
+    return {
+      items: [],
+      uniqueness: buildUniquenessMeta('empty', STRICT_UNIQUE_WINDOW),
+    }
+  }
+
+  const analysis = analyzeMenuRequest(options.requestText, count)
+  const baseItems = generateBalancedMenuItems(dishes, count, options, analysis)
+
+  return enforceMenuUniqueness(dishes, count, options, analysis, baseItems)
+}
+
+export function generateBalancedMenu(dishes, count, options = {}) {
+  return generateBalancedMenuResult(dishes, count, options).items
 }
