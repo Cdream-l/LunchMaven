@@ -156,7 +156,12 @@ export default function GeneratorPage() {
         {dailyMenu.items.length ? (
           <div className="menu-feedback-bar">
             <div className="menu-feedback-copy">
-              <Typography.Text strong>这轮结果请给个反馈</Typography.Text>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Typography.Text strong>这轮结果请给个反馈</Typography.Text>
+                {!dailyMenu.feedback && (
+                  <Tag color="processing">待点评</Tag>
+                )}
+              </div>
               <Typography.Text type="secondary">
                 满意会帮你沉淀偏好，不满意会在当前条件下立刻重生一轮，并且避开最近 10 次重复结果。
               </Typography.Text>
@@ -171,12 +176,11 @@ export default function GeneratorPage() {
               <Button danger onClick={() => submitMenuFeedback('disliked')}>
                 不满意，换一组
               </Button>
-              {dailyMenu.feedback === 'liked' ? (
+              {dailyMenu.feedback === 'liked' && (
                 <Tag color="success">满意</Tag>
-              ) : dailyMenu.feedback === 'disliked' ? (
+              )}
+              {dailyMenu.feedback === 'disliked' && (
                 <Tag color="orange">不满意</Tag>
-              ) : (
-                <Tag color="processing">待点评</Tag>
               )}
             </Space>
           </div>
