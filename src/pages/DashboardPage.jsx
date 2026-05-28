@@ -169,18 +169,18 @@ export default function DashboardPage() {
     () => ({
       backgroundColor: 'transparent',
       tooltip: { trigger: 'axis' },
-      legend: { textStyle: { color: '#475569' } },
+      legend: { textStyle: { color: '#c7e2f4' } },
       grid: { left: 24, right: 24, top: 40, bottom: 24, containLabel: true },
       xAxis: {
         type: 'category',
         data: analytics.trendRows.map((row) => row.label),
-        axisLine: { lineStyle: { color: '#cbd5e1' } },
+        axisLine: { lineStyle: { color: 'rgba(122, 238, 255, 0.28)' } },
       },
       yAxis: [
         {
           type: 'value',
           name: '菜数',
-          splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.18)' } },
+          splitLine: { lineStyle: { color: 'rgba(122, 238, 255, 0.14)' } },
         },
         {
           type: 'value',
@@ -194,12 +194,12 @@ export default function DashboardPage() {
           type: 'line',
           smooth: true,
           data: analytics.trendRows.map((row) => row.count),
-          lineStyle: { width: 4, color: '#f97316' },
-          itemStyle: { color: '#ea580c' },
+          lineStyle: { width: 4, color: '#1fe3ff' },
+          itemStyle: { color: '#2afcb8' },
           areaStyle: {
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: 'rgba(249, 115, 22, 0.32)' },
-              { offset: 1, color: 'rgba(249, 115, 22, 0.02)' },
+              { offset: 0, color: 'rgba(31, 227, 255, 0.34)' },
+              { offset: 1, color: 'rgba(31, 227, 255, 0.02)' },
             ]),
           },
         },
@@ -211,7 +211,7 @@ export default function DashboardPage() {
           data: analytics.trendRows.map((row) => row.averageCalories),
           itemStyle: {
             borderRadius: [8, 8, 0, 0],
-            color: '#0f766e',
+            color: '#ff2bd6',
           },
         },
       ],
@@ -226,7 +226,7 @@ export default function DashboardPage() {
       grid: { left: 24, right: 24, top: 16, bottom: 16, containLabel: true },
       xAxis: {
         type: 'value',
-        splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.18)' } },
+        splitLine: { lineStyle: { color: 'rgba(122, 238, 255, 0.14)' } },
       },
       yAxis: {
         type: 'category',
@@ -241,11 +241,11 @@ export default function DashboardPage() {
           itemStyle: {
             borderRadius: 999,
             color: new echarts.graphic.LinearGradient(1, 0, 0, 0, [
-              { offset: 0, color: '#fdba74' },
-              { offset: 1, color: '#f97316' },
+              { offset: 0, color: '#2afcb8' },
+              { offset: 1, color: '#1fe3ff' },
             ]),
           },
-          label: { show: true, position: 'right', color: '#475569' },
+          label: { show: true, position: 'right', color: '#c7e2f4' },
         },
       ],
     }),
@@ -261,14 +261,14 @@ export default function DashboardPage() {
           type: 'pie',
           radius: ['44%', '72%'],
           center: ['50%', '54%'],
-          label: { color: '#334155', formatter: '{b}\n{c}次' },
+          label: { color: '#c7e2f4', formatter: '{b}\n{c}次' },
           labelLine: { length: 10, length2: 8 },
-          itemStyle: { borderColor: '#fff', borderWidth: 3 },
+          itemStyle: { borderColor: '#050810', borderWidth: 3 },
           data: analytics.topDishes.map(([name, value], index) => ({
             name,
             value,
             itemStyle: {
-              color: ['#fb7185', '#f97316', '#facc15', '#34d399', '#38bdf8', '#818cf8', '#c084fc', '#2dd4bf'][index % 8],
+              color: ['#ff2bd6', '#1fe3ff', '#2afcb8', '#8a5cff', '#ffd166', '#ff5b84', '#7aefff', '#62ff9f'][index % 8],
             },
           })),
         },
@@ -284,17 +284,17 @@ export default function DashboardPage() {
       radar: {
         radius: '62%',
         splitNumber: 4,
-        splitLine: { lineStyle: { color: 'rgba(59, 130, 246, 0.18)' } },
+        splitLine: { lineStyle: { color: 'rgba(31, 227, 255, 0.2)' } },
         splitArea: {
           areaStyle: {
-            color: ['rgba(59, 130, 246, 0.02)', 'rgba(59, 130, 246, 0.04)'],
+            color: ['rgba(31, 227, 255, 0.04)', 'rgba(42, 252, 184, 0.06)'],
           },
         },
         indicator: analytics.tagCounts.map(([name, value]) => ({
           name,
           max: Math.max(value + 1, 4),
         })),
-        axisName: { color: '#334155' },
+        axisName: { color: '#c7e2f4' },
       },
       series: [
         {
@@ -302,9 +302,9 @@ export default function DashboardPage() {
           data: [
             {
               value: analytics.tagCounts.map(([, value]) => value),
-              areaStyle: { color: 'rgba(59, 130, 246, 0.22)' },
-              lineStyle: { color: '#2563eb', width: 3 },
-              itemStyle: { color: '#1d4ed8' },
+              areaStyle: { color: 'rgba(31, 227, 255, 0.22)' },
+              lineStyle: { color: '#1fe3ff', width: 3 },
+              itemStyle: { color: '#2afcb8' },
             },
           ],
         },
@@ -322,15 +322,15 @@ export default function DashboardPage() {
           type: 'pie',
           radius: ['34%', '68%'],
           avoidLabelOverlap: false,
-          label: { formatter: '{b}\n{d}%', color: '#334155' },
+          label: { formatter: '{b}\n{d}%', color: '#c7e2f4' },
           data: analytics.temperatureCounts.map(([name, value]) => ({
             name,
             value,
             itemStyle: {
               color:
-                name === '热菜' ? '#ef4444' :
-                name === '冷菜' ? '#06b6d4' :
-                '#94a3b8',
+                name === '热菜' ? '#ff5b84' :
+                name === '冷菜' ? '#1fe3ff' :
+                '#8a5cff',
             },
           })),
         },
