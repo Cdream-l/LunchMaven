@@ -12,17 +12,17 @@ export default function App() {
   return (
     <ConfigProvider
       theme={{
-        algorithm: theme.darkAlgorithm,
+        algorithm: theme.defaultAlgorithm,
         token: {
           borderRadius: 12,
-          colorBgBase: '#050810',
-          colorBgContainer: 'rgba(9, 14, 28, 0.92)',
-          colorBorder: 'rgba(94, 225, 255, 0.22)',
-          colorInfo: '#1fe3ff',
-          colorPrimary: '#1fe3ff',
-          colorSuccess: '#2afcb8',
-          colorText: '#e7f6ff',
-          colorTextSecondary: 'rgba(199, 226, 244, 0.68)',
+          colorBgBase: '#eef8ff',
+          colorBgContainer: 'rgba(255, 255, 255, 0.92)',
+          colorBorder: 'rgba(43, 132, 210, 0.2)',
+          colorInfo: '#2f74c0',
+          colorPrimary: '#2f74c0',
+          colorSuccess: '#138a74',
+          colorText: '#102033',
+          colorTextSecondary: 'rgba(41, 61, 86, 0.68)',
           fontFamily: '"Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif',
         },
       }}
